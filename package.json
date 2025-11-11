@@ -20,12 +20,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template.git"
+    "url": "https://github.com/willem4130/nextjs-fullstack-template.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template/issues"
+    "url": "https://github.com/willem4130/nextjs-fullstack-template/issues"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template#readme",
+  "homepage": "https://github.com/willem4130/nextjs-fullstack-template#readme",
   "author": "Willem van den Berg <willem@scex.nl>",
   "scripts": {
     "dev": "next dev --turbopack",

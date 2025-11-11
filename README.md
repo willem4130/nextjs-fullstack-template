@@ -9,7 +9,7 @@ A complete, opinionated fullstack Next.js starter that includes everything you n
 ### Option 1: Using degit (Recommended - No Git History)
 
 ```bash
-npx degit YOUR_USERNAME/nextjs-fullstack-template my-app
+npx degit willem4130/nextjs-fullstack-template my-app
 cd my-app
 npm install
 ```
@@ -21,7 +21,7 @@ npm install
 3. Clone and install:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/your-new-repo.git
+git clone https://github.com/willem4130/your-new-repo.git
 cd your-new-repo
 npm install
 ```
@@ -305,4 +305,4 @@ Built with:
 
 ---
 
-**Ready to build?** Start with `npx degit YOUR_USERNAME/nextjs-fullstack-template my-app` 🚀
+**Ready to build?** Start with `npx degit willem4130/nextjs-fullstack-template my-app` 🚀
