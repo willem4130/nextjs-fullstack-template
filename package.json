@@ -1,7 +1,32 @@
 {
-  "name": "iconicwebsite",
+  "name": "nextjs-fullstack-template",
   "version": "1.0.0",
-  "description": "",
+  "description": "Production-ready Next.js 16 fullstack template with tRPC, Prisma, shadcn/ui, Vercel Analytics, Sentry, and rate-limited API routes",
+  "keywords": [
+    "nextjs",
+    "nextjs-16",
+    "typescript",
+    "trpc",
+    "prisma",
+    "postgresql",
+    "shadcn-ui",
+    "tailwindcss",
+    "vercel-analytics",
+    "sentry",
+    "rate-limiting",
+    "template",
+    "fullstack",
+    "production-ready"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/nextjs-fullstack-template#readme",
+  "author": "Willem van den Berg <willem@scex.nl>",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
