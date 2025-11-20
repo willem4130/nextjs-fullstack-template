@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ZodError, ZodSchema } from 'zod'
 import { ratelimit, strictRatelimit, getClientIdentifier } from './rate-limit'
-import * as Sentry from '@sentry/nextjs'
 
 /**
  * API Response helper
@@ -129,16 +128,8 @@ export async function protectedRoute(
     // Log error to console
     console.error('API Error:', error)
 
-    // Capture error in Sentry
-    Sentry.captureException(error, {
-      contexts: {
-        request: {
-          method: request.method,
-          url: request.url,
-          headers: Object.fromEntries(request.headers),
-        },
-      },
-    })
+    // Sentry error tracking disabled
+    // Error already logged to console above
 
     return apiError('Internal server error', 500, {
       message: error instanceof Error ? error.message : 'Unknown error',
