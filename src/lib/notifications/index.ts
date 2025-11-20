@@ -57,7 +57,7 @@ export async function sendNotification(options: NotificationOptions) {
         title: options.title,
         message: options.message,
         actionUrl: options.actionUrl,
-        channels,
+        channels: JSON.stringify(channels), // Convert array to JSON string for SQLite
         metadata: options.metadata,
       },
     });
