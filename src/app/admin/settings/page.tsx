@@ -15,12 +15,55 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Bell, Lock, Palette, Globe, Database, Shield, RefreshCw } from 'lucide-react'
 import { api } from '@/trpc/react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function SettingsPage() {
+  // Simplicate Sync state
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
+  // Settings form state
+  const [siteName, setSiteName] = useState('')
+  const [siteUrl, setSiteUrl] = useState('')
+  const [timezone, setTimezone] = useState('UTC')
+  const [theme, setTheme] = useState('light')
+  const [accentColor, setAccentColor] = useState('#000000')
+
+  // Fetch settings
+  const { data: settings, isLoading: settingsLoading } = api.settings.getSettings.useQuery()
+  const { data: dbStatus } = api.settings.getDatabaseStatus.useQuery()
+
+  // Update mutations
+  const updateGeneral = api.settings.updateGeneral.useMutation({
+    onSuccess: () => {
+      alert('✅ General settings saved successfully!')
+    },
+    onError: (error) => {
+      alert(`❌ Failed to save: ${error.message}`)
+    },
+  })
+
+  const updateAppearance = api.settings.updateAppearance.useMutation({
+    onSuccess: () => {
+      alert('✅ Appearance settings saved successfully!')
+    },
+    onError: (error) => {
+      alert(`❌ Failed to save: ${error.message}`)
+    },
+  })
+
+  // Load settings into state when data arrives
+  useEffect(() => {
+    if (settings) {
+      setSiteName(settings.siteName)
+      setSiteUrl(settings.siteUrl || '')
+      setTimezone(settings.timezone)
+      setTheme(settings.theme)
+      setAccentColor(settings.accentColor)
+    }
+  }, [settings])
+
+  // Simplicate sync
   const { data: syncStatus, refetch: refetchStatus } = api.sync.getSyncStatus.useQuery()
   const syncProjects = api.sync.syncProjects.useMutation({
     onSuccess: (data) => {
@@ -42,6 +85,32 @@ export default function SettingsPage() {
     setIsSyncing(true)
     setSyncMessage(null)
     syncProjects.mutate()
+  }
+
+  const handleSaveGeneral = () => {
+    updateGeneral.mutate({
+      siteName,
+      siteUrl: siteUrl || null,
+      timezone,
+    })
+  }
+
+  const handleSaveAppearance = () => {
+    updateAppearance.mutate({
+      theme: theme as 'light' | 'dark' | 'system',
+      accentColor,
+    })
+  }
+
+  if (settingsLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">Loading settings...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -66,7 +135,12 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="siteName">Site Name</Label>
-              <Input id="siteName" placeholder="Enter site name" defaultValue="Iconic Website" />
+              <Input
+                id="siteName"
+                placeholder="Enter site name"
+                value={siteName}
+                onChange={(e) => setSiteName(e.target.value)}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="siteUrl">Site URL</Label>
@@ -74,12 +148,13 @@ export default function SettingsPage() {
                 id="siteUrl"
                 type="url"
                 placeholder="https://example.com"
-                defaultValue="https://iconicwebsite.com"
+                value={siteUrl}
+                onChange={(e) => setSiteUrl(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="timezone">Timezone</Label>
-              <Select defaultValue="utc">
+              <Select value={timezone.toLowerCase()} onValueChange={(value) => setTimezone(value)}>
                 <SelectTrigger id="timezone">
                   <SelectValue placeholder="Select timezone" />
                 </SelectTrigger>
@@ -92,7 +167,9 @@ export default function SettingsPage() {
               </Select>
             </div>
             <div className="flex justify-end">
-              <Button>Save Changes</Button>
+              <Button onClick={handleSaveGeneral} disabled={updateGeneral.isPending}>
+                {updateGeneral.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -168,7 +245,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="theme">Theme</Label>
-              <Select defaultValue="light">
+              <Select value={theme} onValueChange={(value) => setTheme(value)}>
                 <SelectTrigger id="theme">
                   <SelectValue placeholder="Select theme" />
                 </SelectTrigger>
@@ -182,15 +259,22 @@ export default function SettingsPage() {
             <div className="grid gap-2">
               <Label htmlFor="accentColor">Accent Color</Label>
               <div className="flex gap-2">
-                <div className="h-10 w-10 rounded-md border bg-zinc-900" />
-                <div className="h-10 w-10 rounded-md border bg-blue-500" />
-                <div className="h-10 w-10 rounded-md border bg-green-500" />
-                <div className="h-10 w-10 rounded-md border bg-purple-500" />
-                <div className="h-10 w-10 rounded-md border bg-red-500" />
+                {['#18181b', '#3b82f6', '#22c55e', '#a855f7', '#ef4444'].map((color) => (
+                  <button
+                    key={color}
+                    className={`h-10 w-10 rounded-md border ${
+                      accentColor === color ? 'ring-2 ring-offset-2 ring-black' : ''
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setAccentColor(color)}
+                  />
+                ))}
               </div>
             </div>
             <div className="flex justify-end">
-              <Button>Save Appearance</Button>
+              <Button onClick={handleSaveAppearance} disabled={updateAppearance.isPending}>
+                {updateAppearance.isPending ? 'Saving...' : 'Save Appearance'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -290,19 +374,22 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between rounded-lg border p-4">
               <div className="space-y-0.5">
                 <Label>Connection Status</Label>
-                <p className="text-sm text-muted-foreground">PostgreSQL database is connected</p>
+                <p className="text-sm text-muted-foreground">
+                  {dbStatus?.message || 'Checking connection...'}
+                </p>
               </div>
-              <Badge className="bg-green-500">Connected</Badge>
+              <Badge className={dbStatus?.connected ? 'bg-green-500' : 'bg-red-500'}>
+                {dbStatus?.connected ? 'Connected' : 'Disconnected'}
+              </Badge>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Automatic Backups</Label>
-                <p className="text-sm text-muted-foreground">Last backup: 2 hours ago</p>
+                <Label>Database Provider</Label>
+                <p className="text-sm text-muted-foreground">
+                  {dbStatus?.provider || 'Unknown'}
+                </p>
               </div>
-              <Button variant="outline" size="sm">
-                Backup Now
-              </Button>
             </div>
           </CardContent>
         </Card>

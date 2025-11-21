@@ -8,8 +8,8 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Iconic Website',
-  description: 'A modern Next.js application with tRPC, Prisma, and shadcn/ui',
+  title: 'Simplicate Automations',
+  description: 'Production-ready automation system for Simplicate with contract distribution, hours reminders, and invoice generation',
 }
 
 export default function RootLayout({

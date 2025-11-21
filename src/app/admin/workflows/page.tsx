@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { api } from '@/trpc/react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Play, Settings2, FileText, Clock, DollarSign, CheckCircle2 } from 'lucide-react'
 
-type WorkflowType = 'CONTRACT_DISTRIBUTION' | 'HOURS_REMINDER' | 'INVOICE_GENERATION'
+type WorkflowType = 'contractDistribution' | 'hoursReminder' | 'invoiceGeneration'
 
 export default function WorkflowsPage() {
   const { data: projects, isLoading } = api.projects.getAll.useQuery({
@@ -17,10 +17,52 @@ export default function WorkflowsPage() {
 
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [enabledWorkflows, setEnabledWorkflows] = useState<Set<WorkflowType>>(new Set())
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Query to get existing workflow config
+  const { data: workflowConfig } = api.workflows.getConfig.useQuery(
+    { projectId: selectedProject! },
+    { enabled: !!selectedProject }
+  )
+
+  // Mutation to save workflow config
+  const saveConfig = api.workflows.saveConfig.useMutation({
+    onSuccess: () => {
+      setIsSaving(false)
+      setSaveMessage({ type: 'success', text: '✅ Workflows saved and activated successfully!' })
+      setTimeout(() => setSaveMessage(null), 5000)
+    },
+    onError: (error) => {
+      setIsSaving(false)
+      setSaveMessage({ type: 'error', text: `❌ Failed to save: ${error.message}` })
+      setTimeout(() => setSaveMessage(null), 5000)
+    },
+  })
+
+  // Load existing config when project is selected
+  useEffect(() => {
+    if (workflowConfig) {
+      const workflows = new Set<WorkflowType>()
+      if (workflowConfig.contractDistribution) workflows.add('contractDistribution')
+      if (workflowConfig.hoursReminder) workflows.add('hoursReminder')
+      if (workflowConfig.invoiceGeneration) workflows.add('invoiceGeneration')
+      setEnabledWorkflows(workflows)
+    } else {
+      setEnabledWorkflows(new Set())
+    }
+  }, [workflowConfig])
+
+  // Reset workflows when project changes
+  useEffect(() => {
+    if (!selectedProject) {
+      setEnabledWorkflows(new Set())
+    }
+  }, [selectedProject])
 
   const workflows = [
     {
-      type: 'CONTRACT_DISTRIBUTION' as WorkflowType,
+      type: 'contractDistribution' as WorkflowType,
       name: 'Contract Distribution',
       description: 'Automatically send contracts to team members on new projects',
       icon: FileText,
@@ -28,7 +70,7 @@ export default function WorkflowsPage() {
       bgColor: 'bg-purple-100',
     },
     {
-      type: 'HOURS_REMINDER' as WorkflowType,
+      type: 'hoursReminder' as WorkflowType,
       name: 'Hours Reminders',
       description: 'Smart reminders for team members to submit their hours',
       icon: Clock,
@@ -36,7 +78,7 @@ export default function WorkflowsPage() {
       bgColor: 'bg-blue-100',
     },
     {
-      type: 'INVOICE_GENERATION' as WorkflowType,
+      type: 'invoiceGeneration' as WorkflowType,
       name: 'Invoice Generation',
       description: 'Automatic invoice creation based on approved hours',
       icon: DollarSign,
@@ -44,6 +86,22 @@ export default function WorkflowsPage() {
       bgColor: 'bg-green-100',
     },
   ]
+
+  const handleSaveWorkflows = () => {
+    if (!selectedProject) return
+
+    setIsSaving(true)
+    setSaveMessage(null)
+
+    saveConfig.mutate({
+      projectId: selectedProject,
+      config: {
+        contractDistribution: enabledWorkflows.has('contractDistribution'),
+        hoursReminder: enabledWorkflows.has('hoursReminder'),
+        invoiceGeneration: enabledWorkflows.has('invoiceGeneration'),
+      },
+    })
+  }
 
   const toggleWorkflow = (type: WorkflowType) => {
     const newSet = new Set(enabledWorkflows)
@@ -128,6 +186,17 @@ export default function WorkflowsPage() {
           {/* Workflow Configuration */}
           {selectedProject && (
             <>
+              {saveMessage && (
+                <div
+                  className={`rounded-lg border p-3 text-sm ${
+                    saveMessage.type === 'success'
+                      ? 'bg-green-50 border-green-200 text-green-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}
+                >
+                  {saveMessage.text}
+                </div>
+              )}
               <div className="text-lg font-semibold">Available Workflows</div>
               <div className="grid gap-4 md:grid-cols-3">
                 {workflows.map((workflow) => {
@@ -185,9 +254,9 @@ export default function WorkflowsPage() {
                           selected
                         </div>
                       </div>
-                      <Button size="lg">
+                      <Button size="lg" onClick={handleSaveWorkflows} disabled={isSaving}>
                         <Play className="mr-2 h-4 w-4" />
-                        Save & Activate
+                        {isSaving ? 'Saving...' : 'Save & Activate'}
                       </Button>
                     </div>
                   </CardContent>
