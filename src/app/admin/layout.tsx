@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Settings, LogOut, Workflow, FolderKanban } from 'lucide-react'
+import { LayoutDashboard, Users, Settings, LogOut, Workflow, FolderKanban, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -32,6 +32,11 @@ const navItems = [
     title: 'Workflows',
     href: '/admin/workflows',
     icon: Workflow,
+  },
+  {
+    title: 'Automation',
+    href: '/admin/automation',
+    icon: Activity,
   },
   {
     title: 'Users',
