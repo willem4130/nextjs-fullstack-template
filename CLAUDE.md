@@ -13,24 +13,25 @@ Production-ready automation system for Simplicate that handles contract distribu
 
 ## Current Status
 
-### Completed
-- Simplicate sync (projects + employees)
+### Phase 1 - COMPLETE
+- Simplicate sync (projects + employees + hours + invoices)
 - Settings page with sync buttons
 - Workflows page UI with project selection
 - Users page (real data from DB)
 - WorkflowConfig model and router
 - Dashboard with stats
+- `/admin/contracts` page with status filtering
+- `/admin/hours` page with sync button and stats
+- `/admin/invoices` page with sync button and stats
+- New database models: ProjectMember, ProjectBudget, Expense, PurchasingInvoice, ContractTemplate, WorkflowQueue
+- New routers: hours.ts, invoices.ts
 
-### In Progress - Phase 1 (Foundation)
-- [ ] Create `/admin/contracts` page (currently 404)
-- [ ] Create `/admin/hours` page (currently 404)
-- [ ] Create `/admin/invoices` page (currently 404)
-- [ ] Add `syncHours()` mutation
-- [ ] Add `syncInvoices()` mutation
-- [ ] Add new database models (see docs/project/SCHEMA-ADDITIONS.md)
+### Next - Phase 2 (Webhooks)
+- [ ] Enhance webhook handler for `project.employee.linked`
+- [ ] Create queue processor cron
+- [ ] Test webhook flow end-to-end
 
 ### Upcoming Phases
-- Phase 2: Webhook infrastructure
 - Phase 3: Contract distribution workflow
 - Phase 4: Hours reminders with budget insights
 - Phase 5: Purchasing invoices (hours + km + expenses)
@@ -49,16 +50,18 @@ src/
 │   ├── automation/       # Automation logs
 │   ├── users/            # User management
 │   ├── settings/         # App settings + Simplicate sync
-│   ├── contracts/        # TODO: Create this
-│   ├── hours/            # TODO: Create this
-│   └── invoices/         # TODO: Create this
+│   ├── contracts/        # Contract management
+│   ├── hours/            # Hours tracking
+│   └── invoices/         # Invoice management
 ├── server/api/routers/
-│   ├── sync.ts           # Simplicate sync (projects, employees)
+│   ├── sync.ts           # Simplicate sync (projects, employees, hours, invoices)
 │   ├── projects.ts       # Project CRUD
 │   ├── workflows.ts      # Workflow config
 │   ├── automation.ts     # Automation logs
 │   ├── users.ts          # User management
 │   ├── contracts.ts      # Contract queries
+│   ├── hours.ts          # Hours queries and stats
+│   ├── invoices.ts       # Invoice queries and stats
 │   ├── dashboard.ts      # Dashboard stats
 │   └── settings.ts       # App settings
 ├── lib/
