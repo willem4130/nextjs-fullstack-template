@@ -262,6 +262,171 @@ export const syncRouter = createTRPCRouter({
     }
   }),
 
+  // Sync hours from Simplicate to local database
+  syncHours: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      // Fetch hours from last 90 days
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 90)
+
+      const simplicateHours = await client.getHours({
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+      })
+
+      const results = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+
+      for (const hours of simplicateHours) {
+        try {
+          // Find the project by Simplicate ID
+          const project = await ctx.db.project.findFirst({
+            where: { simplicateId: hours.project_id },
+          })
+
+          if (!project) {
+            results.skipped++
+            continue
+          }
+
+          // Find the user by Simplicate employee ID
+          const user = await ctx.db.user.findFirst({
+            where: { simplicateEmployeeId: hours.employee_id },
+          })
+
+          if (!user) {
+            results.skipped++
+            continue
+          }
+
+          const hoursData = {
+            projectId: project.id,
+            userId: user.id,
+            simplicateHoursId: hours.id,
+            hours: hours.hours,
+            date: new Date(hours.date),
+            description: hours.description || null,
+            hourlyRate: hours.hourly_rate || null,
+            status: mapHoursStatus(hours.status),
+          }
+
+          // Upsert hours entry
+          const existingEntry = await ctx.db.hoursEntry.findUnique({
+            where: { simplicateHoursId: hours.id },
+          })
+
+          if (existingEntry) {
+            await ctx.db.hoursEntry.update({
+              where: { id: existingEntry.id },
+              data: hoursData,
+            })
+            results.updated++
+          } else {
+            await ctx.db.hoursEntry.create({
+              data: hoursData,
+            })
+            results.created++
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to sync hours ${hours.id}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        totalProcessed: simplicateHours.length,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to sync hours from Simplicate: ${errorMessage}`)
+    }
+  }),
+
+  // Sync invoices from Simplicate to local database
+  syncInvoices: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      const simplicateInvoices = await client.getInvoices()
+
+      const results = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+
+      for (const invoice of simplicateInvoices) {
+        try {
+          // Find the project by Simplicate ID (if project_id exists)
+          let project = null
+          if (invoice.project_id) {
+            project = await ctx.db.project.findFirst({
+              where: { simplicateId: invoice.project_id },
+            })
+
+            if (!project) {
+              results.skipped++
+              continue
+            }
+          } else {
+            results.skipped++
+            continue
+          }
+
+          const invoiceData = {
+            projectId: project.id,
+            simplicateInvoiceId: invoice.id,
+            invoiceNumber: invoice.invoice_number || null,
+            amount: invoice.total_excl_vat || invoice.total_incl_vat || 0,
+            status: mapInvoiceStatus(invoice.status),
+            periodStart: invoice.date ? new Date(invoice.date) : new Date(),
+            periodEnd: invoice.date ? new Date(invoice.date) : new Date(),
+          }
+
+          // Upsert invoice
+          const existingInvoice = await ctx.db.invoice.findUnique({
+            where: { simplicateInvoiceId: invoice.id },
+          })
+
+          if (existingInvoice) {
+            await ctx.db.invoice.update({
+              where: { id: existingInvoice.id },
+              data: invoiceData,
+            })
+            results.updated++
+          } else {
+            await ctx.db.invoice.create({
+              data: invoiceData,
+            })
+            results.created++
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to sync invoice ${invoice.id}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        totalProcessed: simplicateInvoices.length,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to sync invoices from Simplicate: ${errorMessage}`)
+    }
+  }),
+
   // Get sync status
   getSyncStatus: publicProcedure.query(async ({ ctx }) => {
     const lastSyncedProject = await ctx.db.project.findFirst({
@@ -297,4 +462,33 @@ function mapProjectStatus(status?: string): 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' |
   if (statusLower.includes('cancel')) return 'CANCELLED'
 
   return 'ACTIVE' // Default
+}
+
+// Helper function to map Simplicate hours status to our enum
+function mapHoursStatus(status?: string): 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'INVOICED' {
+  if (!status) return 'PENDING'
+
+  const statusLower = status.toLowerCase()
+
+  if (statusLower.includes('submitted')) return 'SUBMITTED'
+  if (statusLower.includes('approved')) return 'APPROVED'
+  if (statusLower.includes('rejected')) return 'REJECTED'
+  if (statusLower.includes('invoiced')) return 'INVOICED'
+
+  return 'PENDING' // Default
+}
+
+// Helper function to map Simplicate invoice status to our enum
+function mapInvoiceStatus(status?: string): 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'SENT' | 'PAID' | 'CANCELLED' {
+  if (!status) return 'DRAFT'
+
+  const statusLower = status.toLowerCase()
+
+  if (statusLower.includes('pending')) return 'PENDING_APPROVAL'
+  if (statusLower.includes('approved')) return 'APPROVED'
+  if (statusLower.includes('sent')) return 'SENT'
+  if (statusLower.includes('paid')) return 'PAID'
+  if (statusLower.includes('cancel')) return 'CANCELLED'
+
+  return 'DRAFT' // Default
 }
