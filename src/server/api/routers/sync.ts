@@ -149,6 +149,110 @@ export const syncRouter = createTRPCRouter({
     }
   }),
 
+  // Reset all data and sync fresh from Simplicate
+  resetAndSync: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      // Step 1: Delete all existing data (in correct order due to foreign keys)
+      await ctx.db.notification.deleteMany({})
+      await ctx.db.notificationPreference.deleteMany({})
+      await ctx.db.automationLog.deleteMany({})
+      await ctx.db.hoursEntry.deleteMany({})
+      await ctx.db.invoice.deleteMany({})
+      await ctx.db.contract.deleteMany({})
+      await ctx.db.workflowConfig.deleteMany({})
+      await ctx.db.project.deleteMany({})
+      // Delete users that are not linked to accounts (mock users)
+      // Keep users with accounts (real logged-in users)
+      await ctx.db.user.deleteMany({
+        where: {
+          accounts: { none: {} },
+        },
+      })
+
+      const results = {
+        projectsCreated: 0,
+        usersCreated: 0,
+        errors: [] as string[],
+      }
+
+      // Step 2: Sync projects from Simplicate
+      const simplicateProjects = await client.getProjects({ limit: 100 })
+      for (const project of simplicateProjects) {
+        try {
+          await ctx.db.project.create({
+            data: {
+              simplicateId: project.id,
+              name: project.name,
+              projectNumber: project.project_number || null,
+              description: project.description || null,
+              status: mapProjectStatus(project.status),
+              startDate: project.start_date ? new Date(project.start_date) : null,
+              endDate: project.end_date ? new Date(project.end_date) : null,
+              clientName: project.organization?.name || null,
+              lastSyncedAt: new Date(),
+            },
+          })
+          results.projectsCreated++
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Project ${project.name}: ${errorMessage}`)
+        }
+      }
+
+      // Step 3: Sync employees from Simplicate
+      const simplicateEmployees = await client.getEmployees({ limit: 100 })
+      for (const employee of simplicateEmployees) {
+        try {
+          if (!employee.email) {
+            results.errors.push(`Skipped employee ${employee.name}: No email`)
+            continue
+          }
+
+          // Check if user already exists (e.g., logged-in user)
+          const existingUser = await ctx.db.user.findUnique({
+            where: { email: employee.email },
+          })
+
+          if (existingUser) {
+            // Update existing user with Simplicate ID
+            await ctx.db.user.update({
+              where: { id: existingUser.id },
+              data: {
+                name: employee.name,
+                simplicateEmployeeId: employee.id,
+              },
+            })
+          } else {
+            // Create new user
+            await ctx.db.user.create({
+              data: {
+                email: employee.email,
+                name: employee.name,
+                simplicateEmployeeId: employee.id,
+                role: 'TEAM_MEMBER',
+              },
+            })
+          }
+          results.usersCreated++
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Employee ${employee.name}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        message: `Reset complete! Created ${results.projectsCreated} projects and ${results.usersCreated} users.`,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to reset and sync: ${errorMessage}`)
+    }
+  }),
+
   // Get sync status
   getSyncStatus: publicProcedure.query(async ({ ctx }) => {
     const lastSyncedProject = await ctx.db.project.findFirst({

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Bell, Lock, Palette, Globe, Database, Shield, RefreshCw, Users } from 'lucide-react'
+import { Bell, Lock, Palette, Globe, Database, Shield, RefreshCw, Users, AlertTriangle } from 'lucide-react'
 import { api } from '@/trpc/react'
 import { useState, useEffect } from 'react'
 
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   // Simplicate Sync state
   const [isSyncingProjects, setIsSyncingProjects] = useState(false)
   const [isSyncingEmployees, setIsSyncingEmployees] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   // Settings form state
@@ -109,6 +110,32 @@ export default function SettingsPage() {
     setIsSyncingEmployees(true)
     setSyncMessage(null)
     syncEmployees.mutate()
+  }
+
+  // Reset and sync mutation
+  const resetAndSync = api.sync.resetAndSync.useMutation({
+    onSuccess: (data) => {
+      setIsResetting(false)
+      setSyncMessage(
+        `✅ ${data.message}${data.errors.length > 0 ? ` (${data.errors.length} warnings)` : ''}`
+      )
+      refetchStatus()
+      setTimeout(() => setSyncMessage(null), 15000)
+    },
+    onError: (error) => {
+      setIsResetting(false)
+      setSyncMessage(`❌ Reset failed: ${error.message}`)
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+  })
+
+  const handleResetAndSync = () => {
+    if (!confirm('⚠️ This will DELETE all existing data (projects, users, contracts, hours, invoices) and re-sync from Simplicate.\n\nAre you sure you want to continue?')) {
+      return
+    }
+    setIsResetting(true)
+    setSyncMessage('🔄 Resetting database and syncing from Simplicate...')
+    resetAndSync.mutate()
   }
 
   const handleSaveGeneral = () => {
@@ -272,6 +299,41 @@ export default function SettingsPage() {
                   </>
                 )}
               </Button>
+            </div>
+
+            <Separator />
+
+            {/* Reset & Sync */}
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    Reset & Sync Fresh
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Delete all existing data and re-import everything from Simplicate
+                  </p>
+                </div>
+                <Button
+                  onClick={handleResetAndSync}
+                  disabled={isSyncingProjects || isSyncingEmployees || isResetting}
+                  variant="destructive"
+                  size="sm"
+                >
+                  {isResetting ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Resetting...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Reset & Sync
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             <Separator />
