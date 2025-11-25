@@ -132,4 +132,92 @@ export const automationRouter = createTRPCRouter({
 
       return logs
     }),
+
+  // Get workflow queue items
+  getQueue: publicProcedure
+    .input(
+      z.object({
+        page: z.number().min(1).default(1),
+        limit: z.number().min(1).max(50).default(10),
+        status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { page, limit, status } = input
+      const skip = (page - 1) * limit
+
+      const where: any = {}
+      if (status) where.status = status
+
+      const [items, total] = await Promise.all([
+        ctx.db.workflowQueue.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+        ctx.db.workflowQueue.count({ where }),
+      ])
+
+      return {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      }
+    }),
+
+  // Get queue statistics
+  getQueueStats: publicProcedure.query(async ({ ctx }) => {
+    const [pending, processing, completed, failed] = await Promise.all([
+      ctx.db.workflowQueue.count({ where: { status: 'PENDING' } }),
+      ctx.db.workflowQueue.count({ where: { status: 'PROCESSING' } }),
+      ctx.db.workflowQueue.count({ where: { status: 'COMPLETED' } }),
+      ctx.db.workflowQueue.count({ where: { status: 'FAILED' } }),
+    ])
+
+    return { pending, processing, completed, failed, total: pending + processing + completed + failed }
+  }),
+
+  // Manually trigger queue processing
+  processQueueNow: publicProcedure.mutation(async ({ ctx }) => {
+    // Fetch pending items
+    const pendingItems = await ctx.db.workflowQueue.findMany({
+      where: {
+        status: 'PENDING',
+        scheduledFor: { lte: new Date() },
+      },
+      take: 5,
+    })
+
+    return {
+      message: `Found ${pendingItems.length} items to process. Visit /api/cron/process-queue to trigger processing.`,
+      pendingCount: pendingItems.length,
+    }
+  }),
+
+  // Add test item to queue (for testing)
+  addTestQueueItem: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        workflowType: z.enum(['CONTRACT_DISTRIBUTION', 'HOURS_REMINDER', 'INVOICE_GENERATION']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.workflowQueue.create({
+        data: {
+          workflowType: input.workflowType,
+          projectId: input.projectId,
+          payload: { test: true, createdAt: new Date().toISOString() },
+          status: 'PENDING',
+          scheduledFor: new Date(),
+        },
+      })
+
+      return { id: item.id, message: 'Test item added to queue' }
+    }),
 })

@@ -26,13 +26,20 @@ Production-ready automation system for Simplicate that handles contract distribu
 - New database models: ProjectMember, ProjectBudget, Expense, PurchasingInvoice, ContractTemplate, WorkflowQueue
 - New routers: hours.ts, invoices.ts
 
-### Next - Phase 2 (Webhooks)
-- [ ] Enhance webhook handler for `project.employee.linked`
-- [ ] Create queue processor cron
-- [ ] Test webhook flow end-to-end
+### Phase 2 - COMPLETE
+- [x] `project.employee.linked` webhook handler
+- [x] Queue processor cron at `/api/cron/process-queue`
+- [x] Vercel cron configuration (every minute)
+- [x] Queue monitor UI on Automation page (tabs: Logs + Queue)
+- [x] Queue endpoints: getQueue, getQueueStats, processQueueNow, addTestQueueItem
+
+### Next - Phase 3 (Contracts)
+- [ ] Contract template management
+- [ ] Contract upload handler
+- [ ] Email with download/upload links
+- [ ] Reminder escalation (3, 7, 14 days)
 
 ### Upcoming Phases
-- Phase 3: Contract distribution workflow
 - Phase 4: Hours reminders with budget insights
 - Phase 5: Purchasing invoices (hours + km + expenses)
 - Phase 6: Expense tracking

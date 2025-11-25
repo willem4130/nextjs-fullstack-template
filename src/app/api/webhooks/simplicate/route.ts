@@ -72,6 +72,10 @@ async function processWebhook(
         await handleProjectEvent(payload);
         break;
 
+      case 'project.employee.linked':
+        await handleEmployeeLinkedEvent(payload);
+        break;
+
       case 'hours.created':
       case 'hours.updated':
         await handleHoursEvent(payload);
@@ -277,6 +281,67 @@ function mapInvoiceStatus(simplicateStatus: string): any {
   };
 
   return statusMap[simplicateStatus?.toLowerCase()] || 'DRAFT';
+}
+
+/**
+ * Handle project.employee.linked event
+ * When an employee is linked to a project, queue a contract distribution workflow
+ */
+async function handleEmployeeLinkedEvent(payload: SimplicateWebhookPayload) {
+  const data = payload.data;
+  const projectId = data.project_id || data.projectId;
+  const employeeId = data.employee_id || data.employeeId;
+
+  console.log('[Webhook] Employee linked to project:', { projectId, employeeId });
+
+  if (!projectId || !employeeId) {
+    console.warn('[Webhook] Missing project_id or employee_id in payload');
+    return;
+  }
+
+  // Find the project in our database
+  const project = await prisma.project.findUnique({
+    where: { simplicateId: projectId },
+    include: { workflowConfig: true },
+  });
+
+  if (!project) {
+    console.warn('[Webhook] Project not found:', projectId);
+    return;
+  }
+
+  // Check if contract distribution is enabled for this project
+  const contractDistributionEnabled = project.workflowConfig?.contractDistribution ?? true;
+
+  if (!contractDistributionEnabled) {
+    console.log('[Webhook] Contract distribution disabled for project:', project.id);
+    return;
+  }
+
+  // Find the user by Simplicate employee ID
+  const user = await prisma.user.findUnique({
+    where: { simplicateEmployeeId: employeeId },
+  });
+
+  // Queue contract distribution workflow
+  await prisma.workflowQueue.create({
+    data: {
+      workflowType: WorkflowType.CONTRACT_DISTRIBUTION,
+      projectId: project.id,
+      userId: user?.id,
+      payload: {
+        projectId: project.id,
+        projectSimplicateId: projectId,
+        employeeId: employeeId,
+        employeeName: data.employee_name || data.employeeName,
+        employeeEmail: data.employee_email || data.employeeEmail,
+      },
+      status: 'PENDING',
+      scheduledFor: new Date(),
+    },
+  });
+
+  console.log('[Webhook] Contract distribution queued for project:', project.id);
 }
 
 // Verify webhook signature (if Simplicate provides one)
