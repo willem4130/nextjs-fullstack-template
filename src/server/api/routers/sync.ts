@@ -392,13 +392,20 @@ export const syncRouter = createTRPCRouter({
             projectServiceId = projectService?.id || null
           }
 
+          // Simplicate uses start_date for hours entries
+          const dateStr = hours.start_date || hours.date
+          if (!dateStr) {
+            results.skipped++
+            continue
+          }
+
           const hoursData = {
             projectId: project.id,
             userId: user.id,
             projectServiceId,
             simplicateHoursId: hours.id,
             hours: hours.hours,
-            date: new Date(hours.date),
+            date: new Date(dateStr),
             description: hours.description || null,
             hourlyRate: hours.tariff || hours.hourly_rate || null,
             billable: hours.billable ?? true,

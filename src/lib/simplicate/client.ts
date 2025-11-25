@@ -53,7 +53,8 @@ export interface SimplicateHours {
   project_id: string;
   employee_id: string;
   hours: number;
-  date: string;
+  date?: string;
+  start_date?: string;  // Simplicate uses start_date for hours
   description?: string;
   status?: string;
   hourly_rate?: number;
