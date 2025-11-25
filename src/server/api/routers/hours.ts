@@ -245,4 +245,242 @@ export const hoursRouter = createTRPCRouter({
       servicesAtRisk: atRisk,
     }
   }),
+
+  // Get projects with hours and budget summary
+  getProjectsSummary: publicProcedure
+    .input(
+      z.object({
+        month: z.string().optional(), // Format: YYYY-MM
+        projectId: z.string().optional(),
+        employeeId: z.string().optional(),
+        sortBy: z.enum(['client', 'project', 'hours', 'budget']).default('client'),
+        sortOrder: z.enum(['asc', 'desc']).default('asc'),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const now = new Date()
+      const currentMonth = input?.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const [year, month] = currentMonth.split('-').map(Number)
+
+      const startOfMonth = new Date(year!, month! - 1, 1)
+      const endOfMonth = new Date(year!, month!, 0, 23, 59, 59)
+
+      // Build where clause for hours
+      const hoursWhere: Prisma.HoursEntryWhereInput = {
+        date: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+      }
+      if (input?.projectId) hoursWhere.projectId = input.projectId
+      if (input?.employeeId) hoursWhere.userId = input.employeeId
+
+      // Get all hours for the month grouped by project and service
+      const hours = await ctx.db.hoursEntry.findMany({
+        where: hoursWhere,
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              clientName: true,
+            },
+          },
+          projectService: {
+            select: {
+              id: true,
+              name: true,
+              budgetHours: true,
+              usedHours: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      })
+
+      // Group by project -> service -> employee
+      const projectMap = new Map<string, {
+        project: { id: string; name: string; clientName: string | null };
+        services: Map<string, {
+          service: { id: string; name: string; budgetHours: number | null; usedHours: number };
+          employees: Map<string, {
+            employee: { id: string; name: string | null; email: string };
+            hoursThisMonth: number;
+            entries: number;
+          }>;
+          hoursThisMonth: number;
+        }>;
+        totalHoursThisMonth: number;
+      }>()
+
+      for (const entry of hours) {
+        const projectId = entry.project.id
+        if (!projectMap.has(projectId)) {
+          projectMap.set(projectId, {
+            project: entry.project,
+            services: new Map(),
+            totalHoursThisMonth: 0,
+          })
+        }
+        const projectData = projectMap.get(projectId)!
+        projectData.totalHoursThisMonth += entry.hours
+
+        const serviceId = entry.projectService?.id || 'no-service'
+        if (!projectData.services.has(serviceId)) {
+          projectData.services.set(serviceId, {
+            service: entry.projectService || { id: 'no-service', name: 'No dienst', budgetHours: null, usedHours: 0 },
+            employees: new Map(),
+            hoursThisMonth: 0,
+          })
+        }
+        const serviceData = projectData.services.get(serviceId)!
+        serviceData.hoursThisMonth += entry.hours
+
+        const employeeId = entry.user.id
+        if (!serviceData.employees.has(employeeId)) {
+          serviceData.employees.set(employeeId, {
+            employee: entry.user,
+            hoursThisMonth: 0,
+            entries: 0,
+          })
+        }
+        const employeeData = serviceData.employees.get(employeeId)!
+        employeeData.hoursThisMonth += entry.hours
+        employeeData.entries += 1
+      }
+
+      // Convert to array and sort
+      const projects = Array.from(projectMap.values()).map(p => ({
+        ...p.project,
+        services: Array.from(p.services.values()).map(s => ({
+          ...s.service,
+          hoursThisMonth: s.hoursThisMonth,
+          budgetPercentage: s.service.budgetHours && s.service.budgetHours > 0
+            ? Math.round((s.service.usedHours / s.service.budgetHours) * 100)
+            : null,
+          monthPercentageOfBudget: s.service.budgetHours && s.service.budgetHours > 0
+            ? Math.round((s.hoursThisMonth / s.service.budgetHours) * 100)
+            : null,
+          employees: Array.from(s.employees.values()),
+        })),
+        totalHoursThisMonth: p.totalHoursThisMonth,
+      }))
+
+      // Sort projects
+      const sortBy = input?.sortBy || 'client'
+      const sortOrder = input?.sortOrder || 'asc'
+      projects.sort((a, b) => {
+        let cmp = 0
+        switch (sortBy) {
+          case 'client':
+            cmp = (a.clientName || '').localeCompare(b.clientName || '')
+            break
+          case 'project':
+            cmp = a.name.localeCompare(b.name)
+            break
+          case 'hours':
+            cmp = a.totalHoursThisMonth - b.totalHoursThisMonth
+            break
+          case 'budget':
+            const aMax = Math.max(...a.services.map(s => s.budgetPercentage || 0))
+            const bMax = Math.max(...b.services.map(s => s.budgetPercentage || 0))
+            cmp = aMax - bMax
+            break
+        }
+        return sortOrder === 'desc' ? -cmp : cmp
+      })
+
+      return {
+        month: currentMonth,
+        projects,
+        totals: {
+          hoursThisMonth: hours.reduce((sum, h) => sum + h.hours, 0),
+          entriesThisMonth: hours.length,
+          projectsWithHours: projects.length,
+        },
+      }
+    }),
+
+  // Get monthly totals for trend
+  getMonthlyTotals: publicProcedure
+    .input(
+      z.object({
+        months: z.number().min(1).max(12).default(6),
+        projectId: z.string().optional(),
+        employeeId: z.string().optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const monthCount = input?.months || 6
+      const now = new Date()
+      const results: { month: string; hours: number; entries: number }[] = []
+
+      for (let i = 0; i < monthCount; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+        const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59)
+
+        const where: Prisma.HoursEntryWhereInput = {
+          date: {
+            gte: startOfMonth,
+            lte: endOfMonth,
+          },
+        }
+        if (input?.projectId) where.projectId = input.projectId
+        if (input?.employeeId) where.userId = input.employeeId
+
+        const [aggregate, count] = await Promise.all([
+          ctx.db.hoursEntry.aggregate({
+            _sum: { hours: true },
+            where,
+          }),
+          ctx.db.hoursEntry.count({ where }),
+        ])
+
+        results.push({
+          month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+          hours: aggregate._sum.hours || 0,
+          entries: count,
+        })
+      }
+
+      return results.reverse()
+    }),
+
+  // Get all projects for filter dropdown
+  getProjectsForFilter: publicProcedure.query(async ({ ctx }) => {
+    const projects = await ctx.db.project.findMany({
+      select: {
+        id: true,
+        name: true,
+        clientName: true,
+      },
+      orderBy: [
+        { clientName: 'asc' },
+        { name: 'asc' },
+      ],
+    })
+    return projects
+  }),
+
+  // Get all employees for filter dropdown
+  getEmployeesForFilter: publicProcedure.query(async ({ ctx }) => {
+    const employees = await ctx.db.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    })
+    return employees
+  }),
 })
