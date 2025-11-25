@@ -6,6 +6,7 @@ import { dashboardRouter } from '@/server/api/routers/dashboard'
 import { syncRouter } from '@/server/api/routers/sync'
 import { workflowsRouter } from '@/server/api/routers/workflows'
 import { settingsRouter } from '@/server/api/routers/settings'
+import { usersRouter } from '@/server/api/routers/users'
 
 /**
  * This is the primary router for your server.
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
   sync: syncRouter,
   workflows: workflowsRouter,
   settings: settingsRouter,
+  users: usersRouter,
 })
 
 // Export type definition of API
