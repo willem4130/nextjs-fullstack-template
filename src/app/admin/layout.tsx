@@ -1,5 +1,8 @@
+'use client'
+
 import Link from 'next/link'
-import { LayoutDashboard, Users, Settings, LogOut, Workflow } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { LayoutDashboard, Users, Settings, LogOut, Workflow, FolderKanban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -11,12 +14,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { SyncButton } from '@/components/admin/sync-button'
+import { cn } from '@/lib/utils'
 
 const navItems = [
   {
     title: 'Dashboard',
     href: '/admin/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    title: 'Projects',
+    href: '/admin/projects',
+    icon: FolderKanban,
   },
   {
     title: 'Workflows',
@@ -36,6 +46,8 @@ const navItems = [
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
@@ -55,11 +67,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <nav className="flex-1 space-y-1 p-4">
             {navItems.map((item) => {
               const Icon = item.icon
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
                 <Link key={item.href} href={item.href}>
                   <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-3 hover:bg-accent"
+                    variant={isActive ? 'secondary' : 'ghost'}
+                    className={cn(
+                      'w-full justify-start gap-3',
+                      isActive && 'bg-accent'
+                    )}
                   >
                     <Icon className="h-4 w-4" />
                     {item.title}
@@ -106,6 +122,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content */}
       <main className="flex-1 pl-64">
+        {/* Top Header with Sync Button */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-end gap-4 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <SyncButton />
+        </header>
         <div className="container mx-auto p-6">{children}</div>
       </main>
     </div>
