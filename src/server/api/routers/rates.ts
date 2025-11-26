@@ -39,8 +39,8 @@ export const ratesRouter = createTRPCRouter({
         name: emp.name,
         type: emp.type?.label || 'unknown',
         employeeRecord: {
-          salesTariff: emp.hourly_sales_tariff,
-          costTariff: emp.hourly_cost_tariff,
+          salesTariff: emp.hourly_sales_tariff ?? null,
+          costTariff: emp.hourly_cost_tariff ?? null,
         },
         hoursEntries: [],
         projectAssignments: [],
@@ -71,15 +71,19 @@ export const ratesRouter = createTRPCRouter({
     }
 
     // Check project employees for assignments with rates
+    // Note: getProjectEmployees returns a different structure than SimplicateEmployee
     for (const project of projects) {
       try {
-        const projectEmployees = await client.getProjectEmployees(project.id)
+        const projectEmployees = await client.getProjectEmployees(project.id) as unknown as Array<{
+          employee?: { id?: string }
+          hourly_rate?: number
+        }>
         for (const pe of projectEmployees) {
           const empId = pe.employee?.id
           if (empId && employeeRates[empId]) {
             employeeRates[empId].projectAssignments.push({
               projectName: project.name,
-              hourlyRate: pe.hourly_rate || null,
+              hourlyRate: pe.hourly_rate ?? null,
             })
           }
         }
