@@ -60,6 +60,8 @@ import {
   Trash2,
   Pencil,
   X,
+  Library,
+  Check,
 } from 'lucide-react'
 import { api } from '@/trpc/react'
 import { useState, useEffect, useCallback } from 'react'
@@ -112,6 +114,7 @@ export default function HoursPage() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [libraryDialogOpen, setLibraryDialogOpen] = useState(false)
   const [newPresetName, setNewPresetName] = useState('')
   const [editingPreset, setEditingPreset] = useState<{ id: string; name: string } | null>(null)
 
@@ -281,6 +284,25 @@ export default function HoursPage() {
     filters.employees.length > 0 ||
     filters.sortBy !== 'client' ||
     filters.sortOrder !== 'asc'
+
+  // Format filter summary for preset display
+  const formatFilterSummary = (presetFilters: unknown): string => {
+    const f = presetFilters as FilterState
+    const parts: string[] = []
+    if (f.months?.length) {
+      parts.push(`${f.months.length} month${f.months.length > 1 ? 's' : ''}`)
+    }
+    if (f.projects?.length) {
+      parts.push(`${f.projects.length} project${f.projects.length > 1 ? 's' : ''}`)
+    }
+    if (f.employees?.length) {
+      parts.push(`${f.employees.length} employee${f.employees.length > 1 ? 's' : ''}`)
+    }
+    if (f.sortBy && f.sortBy !== 'client') {
+      parts.push(`sort: ${f.sortBy}`)
+    }
+    return parts.length > 0 ? parts.join(', ') : 'Default filters'
+  }
 
   return (
     <div className="space-y-6">
@@ -453,72 +475,150 @@ export default function HoursPage() {
             </div>
           </div>
 
-          {/* Preset management */}
+          {/* Preset Library Button */}
           {presets && presets.length > 0 && (
             <div className="mt-4 pt-4 border-t">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-muted-foreground">Manage presets:</span>
-                {presets.map((preset) => (
-                  <div key={preset.id} className="flex items-center">
-                    {editingPreset?.id === preset.id ? (
-                      <div className="flex items-center gap-1">
-                        <Input
-                          className="h-7 w-32"
-                          value={editingPreset.name}
-                          onChange={(e) => setEditingPreset({ ...editingPreset, name: e.target.value })}
-                          onKeyDown={(e) => e.key === 'Enter' && handleRenamePreset()}
-                          autoFocus
-                        />
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={handleRenamePreset}>
-                          <Save className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingPreset(null)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-7 gap-1">
-                            {preset.isDefault && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />}
-                            {preset.name}
-                            <MoreHorizontal className="h-3 w-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          <DropdownMenuItem onClick={() => loadPreset(preset)}>
-                            Load preset
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleUpdatePreset(preset.id)}>
-                            Update with current filters
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setEditingPreset({ id: preset.id, name: preset.name })}>
-                            <Pencil className="mr-2 h-3 w-3" />
-                            Rename
-                          </DropdownMenuItem>
-                          {!preset.isDefault && (
-                            <DropdownMenuItem onClick={() => handleSetDefault(preset.id)}>
-                              <Star className="mr-2 h-3 w-3" />
-                              Set as default
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDeletePreset(preset.id)}
-                          >
-                            <Trash2 className="mr-2 h-3 w-3" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <Button variant="outline" size="sm" onClick={() => setLibraryDialogOpen(true)}>
+                <Library className="mr-2 h-4 w-4" />
+                Manage Presets ({presets.length})
+              </Button>
             </div>
           )}
+
+          {/* Preset Library Dialog */}
+          <Dialog open={libraryDialogOpen} onOpenChange={setLibraryDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Library className="h-5 w-5" />
+                  Filter Presets Library
+                </DialogTitle>
+                <DialogDescription>
+                  Manage your saved filter presets. Click a preset to load it, or use the actions to edit.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[400px] overflow-y-auto">
+                {presets && presets.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[200px]">Name</TableHead>
+                        <TableHead>Filters</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {presets.map((preset) => (
+                        <TableRow key={preset.id} className="group">
+                          <TableCell>
+                            {editingPreset?.id === preset.id ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  className="h-8 w-full"
+                                  value={editingPreset.name}
+                                  onChange={(e) => setEditingPreset({ ...editingPreset, name: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRenamePreset()
+                                    if (e.key === 'Escape') setEditingPreset(null)
+                                  }}
+                                  autoFocus
+                                />
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={handleRenamePreset}>
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingPreset(null)}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                {preset.isDefault && (
+                                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 shrink-0" />
+                                )}
+                                <span className="font-medium">{preset.name}</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {formatFilterSummary(preset.filters)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {editingPreset?.id !== preset.id && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => {
+                                    loadPreset(preset)
+                                    setLibraryDialogOpen(false)
+                                  }}
+                                  title="Load preset"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleUpdatePreset(preset.id)}>
+                                      <RefreshCw className="mr-2 h-4 w-4" />
+                                      Update with current filters
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setEditingPreset({ id: preset.id, name: preset.name })}>
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    {!preset.isDefault && (
+                                      <DropdownMenuItem onClick={() => handleSetDefault(preset.id)}>
+                                        <Star className="mr-2 h-4 w-4" />
+                                        Set as default
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => handleDeletePreset(preset.id)}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="py-8 text-center text-muted-foreground">
+                    <Library className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No presets saved yet.</p>
+                    <p className="text-sm">Save your current filters to create a preset.</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setLibraryDialogOpen(false)}>
+                  Close
+                </Button>
+                <Button onClick={() => {
+                  setLibraryDialogOpen(false)
+                  setSaveDialogOpen(true)
+                }}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Create New Preset
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 

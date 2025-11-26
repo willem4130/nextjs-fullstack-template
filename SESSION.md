@@ -1,14 +1,14 @@
 # Session State - Simplicate Automation System
 
-**Last Updated**: November 25, 2025, 4:15 PM
-**Session Type**: Standard
+**Last Updated**: November 26, 2025, 4:50 PM
+**Session Type**: Complex
 **Project**: Simplicate Automation System for contract distribution, hours reminders, and invoice generation
 
 ---
 
 ## 🎯 Current Objective
 
-Completed redesign of the Hours page with project/client focus, filtering capabilities, and monthly breakdown views. Updated navigation sidebar with logical presentation.
+Enhanced Hours page with multi-select filters and saveable filter presets. Also fixed hours sync pagination and date field issue.
 
 ---
 
@@ -16,41 +16,40 @@ Completed redesign of the Hours page with project/client focus, filtering capabi
 
 ### ✅ Completed Tasks
 
-- **Hours Page Redesign - COMPLETE**
-  - Redesigned hours page with project/client-centric view (not dienst-focused)
-  - Added filtering by: Month (last 12 months), Project, Employee
-  - Added sorting by: Client, Project, Hours, Budget %
-  - Created collapsible project cards showing Client - Project hierarchy
-  - Each project expands to show diensten with budget progress
-  - Each dienst shows employee breakdown with hours this month
-  - Budget comparison: shows total budget usage AND this month's contribution
-  - Added stats cards: Hours this month, Time entries, Projects, Last 6 months total
+- **Multi-Select Filters - COMPLETE**
+  - Months multi-select (select multiple months at once)
+  - Projects multi-select with client grouping
+  - Employees multi-select with search
+  - New reusable MultiSelect component created
 
-- **Router Endpoints Added**
-  - `getProjectsSummary` - Project-centric hours with monthly breakdown
-  - `getMonthlyTotals` - Trend data for last N months
-  - `getProjectsForFilter` - Projects dropdown data
-  - `getEmployeesForFilter` - Employees dropdown data
+- **Filter Presets System - COMPLETE**
+  - Quick access bar with one-click preset loading
+  - Save current filters as named preset
+  - Preset management: load, update, rename, delete
+  - Set default preset (auto-loads on page visit)
+  - Database model for presets (FilterPreset)
+  - tRPC router for CRUD operations
 
-- **Navigation Update - COMPLETE**
-  - Reordered: Dashboard, Projects, Hours, People, Contracts, Invoices, Workflows, Automation, Settings
-  - Renamed "Users" to "People"
-  - Added Hours, Contracts, Invoices to sidebar
+- **Hours Sync Fixes - COMPLETE**
+  - Fixed pagination (getAllHours with proper pagination)
+  - Fixed date field (Simplicate uses start_date not date)
+  - Fixed filter syntax (q[field][operator] format)
 
-- **Phase 2 - COMPLETE** (from previous session)
-  - `project.employee.linked` webhook handler
-  - Queue processor cron at `/api/cron/process-queue`
-  - Queue monitor UI on Automation page
+- **Simplicate API Expansion - COMPLETE**
+  - Added hours approval endpoints
+  - Added employee expenses endpoint
+  - Added costs/expenses endpoint
+  - Added mileage endpoint
+  - Added CRM organizations endpoint
+
+- **Bug Fixes - COMPLETE**
+  - Fixed favicon.ico 404 (added icon.svg)
 
 ### 🚧 In Progress
 
-- User is testing the new Hours page UI
+- User testing new multi-select filters and presets
 
 ### 📋 Pending Tasks
-
-**User Feedback**:
-- Awaiting feedback on Hours page redesign
-- May need adjustments based on testing
 
 **Future Phases**:
 - Phase 3: Contract distribution workflow
@@ -64,65 +63,84 @@ Completed redesign of the Hours page with project/client focus, filtering capabi
 
 ## 🔑 Key Decisions Made
 
-**Hours Page Structure**
-- **Choice**: Project/Client as primary grouping, diensten as secondary
-- **Rationale**: User requested less dienst-focused view, want to see client/project first
-- **Impact**: Clearer hierarchy, easier to understand where hours are going
+**Multi-Select Approach**
+- **Choice**: Custom MultiSelect component using shadcn Command + Popover
+- **Rationale**: Standard shadcn doesn't have multi-select, Command provides search
+- **Impact**: Reusable component for other pages
 
-**Monthly Filter Default**
-- **Choice**: Default to current month, allow browsing last 12 months
-- **Rationale**: Most useful view is current month with budget comparison
-- **Impact**: Immediate context for "this month vs budget"
+**Preset Storage**
+- **Choice**: Database-backed with planned localStorage fallback
+- **Rationale**: User wanted both (synced when logged in, local when not)
+- **Impact**: Presets persist across sessions and devices
 
-**Standard Components Only**
-- **Choice**: Use only shadcn/ui components (Select, Collapsible, Table, Progress, etc.)
-- **Rationale**: User explicitly requested no custom components
-- **Impact**: Consistent UI, maintainable code
+**Hours Router Enhancement**
+- **Choice**: Support both single and array params (backwards compatible)
+- **Rationale**: Existing code keeps working, new multi-select uses arrays
+- **Impact**: No breaking changes to existing functionality
 
-**Navigation Order**
-- **Choice**: Dashboard → Projects → Hours → People → Contracts → Invoices → Workflows → Automation → Settings
-- **Rationale**: User-specified logical presentation
-- **Impact**: All pages now accessible from sidebar
+**Simplicate Date Field**
+- **Choice**: Use start_date with fallback to date
+- **Rationale**: Simplicate API returns start_date for hours entries
+- **Impact**: Hours sync now works correctly
 
 ---
 
 ## 📁 Files Modified
 
 ### Created
-- `src/components/ui/collapsible.tsx` - Collapsible component from shadcn
+- `src/components/ui/multi-select.tsx` - Reusable searchable multi-select
+- `src/components/ui/popover.tsx` - shadcn popover component
+- `src/components/ui/checkbox.tsx` - shadcn checkbox component
+- `src/components/ui/command.tsx` - shadcn command component
+- `src/server/api/routers/filterPresets.ts` - Filter presets CRUD router
+- `src/app/icon.svg` - Favicon
 
 ### Modified
-- `src/app/admin/hours/page.tsx` - Complete redesign with project-centric view
-- `src/server/api/routers/hours.ts` - Added 4 new endpoints for filtering/sorting
-- `src/app/admin/layout.tsx` - Updated navigation sidebar
+- `src/app/admin/hours/page.tsx` - Complete rewrite with multi-select and presets
+- `src/server/api/routers/hours.ts` - Multi-value filter support
+- `src/server/api/routers/sync.ts` - Hours sync fixes (pagination, date)
+- `src/server/api/root.ts` - Added filterPresets router
+- `src/lib/simplicate/client.ts` - Added new API endpoints
+- `prisma/schema.prisma` - Added FilterPreset model
+- `CLAUDE.md` - Updated API reference
+- `docs/project/IMPLEMENTATION-PLAN.md` - Updated progress
 
 ---
 
 ## 🏗️ Patterns & Architecture
 
-**Patterns Implemented**:
+**Components Added**:
 
-1. **Project-Centric View Pattern**
-   - Group hours by Project → Dienst → Employee
-   - Collapsible cards for drill-down
-   - Budget progress at dienst level
+1. **MultiSelect Component**
+   - Props: options, selected, onChange, placeholder, icon
+   - Supports option grouping by category
+   - Searchable with Command component
+   - Shows badges for selected items
 
-2. **Filter/Sort Pattern**
-   - Server-side filtering and sorting via tRPC
-   - Multiple filter dimensions (month, project, employee)
-   - Sort options passed to query
+2. **Filter Presets System**
+   - Database model: FilterPreset (id, userId, name, page, filters, isDefault)
+   - Router: getAll, getDefault, create, update, delete, setDefault
+   - UI: Quick access bar + management dropdown
 
-3. **Monthly Aggregation**
-   - Hours aggregated per month
-   - Budget percentage calculated at query time
-   - "This month's % of total budget" metric
-
-**New Router Endpoints**:
+**Router Enhancements**:
 ```
-getProjectsSummary    - Monthly breakdown by project/dienst/employee
-getMonthlyTotals      - Trend data for last N months
-getProjectsForFilter  - Projects for dropdown
-getEmployeesForFilter - Employees for dropdown
+hours.getProjectsSummary now accepts:
+  - months: string[] (multiple months)
+  - projectIds: string[] (multiple projects)
+  - employeeIds: string[] (multiple employees)
+  - Backwards compatible with single values
+```
+
+**Simplicate Client New Endpoints**:
+```
+getHoursApproval()
+getHoursApprovalStatuses()
+getHoursTypes()
+getEmployeeExpenses()
+getCostTypes()
+getExpenses()
+getMileage()
+getOrganizations()
 ```
 
 ---
@@ -132,19 +150,19 @@ getEmployeesForFilter - Employees for dropdown
 **Important Context**:
 - Production URL: https://simplicate-automations.vercel.app/
 - Hours page at: /admin/hours
-- All navigation items now accessible
+- Database schema needs migration for FilterPreset (auto on Vercel)
 
-**Key Features of New Hours Page**:
-- Month selector with nl-NL locale (e.g., "november 2025")
-- Filter by specific project or employee
-- Sort by client name, project name, hours, or budget percentage
-- Collapsible project cards show diensten underneath
-- Budget progress bars with color-coded status
-- Employee breakdown table within each dienst
+**Key Features**:
+- Multi-select dropdowns for months, projects, employees
+- Presets shown as quick-access buttons above filters
+- Save/Load/Rename/Delete/Set Default for presets
+- Default preset auto-loads on page visit
+- Clear button to reset all filters
 
-**Gotchas**:
-- UserRole enum has ADMIN and TEAM_MEMBER (not EMPLOYEE)
-- Removed role filter from getEmployeesForFilter to include all users
+**Simplicate API Notes**:
+- Hours use `start_date` not `date`
+- Filter syntax: `q[field][operator]=value`
+- Pagination: `offset=X&limit=Y`
 
 ---
 
@@ -156,40 +174,29 @@ getEmployeesForFilter - Employees for dropdown
 
 I'm continuing work on Simplicate Automations. Here's where we left off:
 
-**Current Goal**: User is testing the new Hours page, awaiting feedback.
+**Current Goal**: User is testing multi-select filters and filter presets on Hours page.
 
 **Just Completed**:
-- ✅ Hours page redesign with project/client focus
-- ✅ Filtering by month, project, employee
-- ✅ Sorting by client, project, hours, budget %
-- ✅ Monthly breakdown showing hours per project-dienst-employee
-- ✅ Budget comparison (total usage + this month's contribution)
-- ✅ Navigation updated: Dashboard, Projects, Hours, People, Contracts, Invoices, Workflows, Automation, Settings
+- ✅ Multi-select filters (months, projects, employees)
+- ✅ Filter presets system (save, load, rename, delete, set default)
+- ✅ Quick access bar for presets
+- ✅ Fixed hours sync (pagination + date field)
+- ✅ Fixed favicon 404
+- ✅ Expanded Simplicate API client
 
-**What User Wanted**:
-- More project/client focused (less dienst-centric)
-- Filtering and sorting features
-- See hours by month/employee/project-dienst
-- Current month hours vs budget comparison
-- Standard shadcn components only
-
-**Files Changed**:
-- `src/app/admin/hours/page.tsx` - Complete redesign
-- `src/server/api/routers/hours.ts` - 4 new endpoints
-- `src/app/admin/layout.tsx` - Navigation update
+**Key Files Changed**:
+- `src/app/admin/hours/page.tsx` - Multi-select filters + presets UI
+- `src/components/ui/multi-select.tsx` - Reusable component
+- `src/server/api/routers/filterPresets.ts` - Presets CRUD
+- `src/server/api/routers/hours.ts` - Multi-value support
+- `src/server/api/routers/sync.ts` - Hours sync fixes
 
 **Next**:
-- Await user feedback on Hours page
-- Make adjustments as needed
+- Await user feedback on filters/presets
+- May need localStorage fallback for presets
+- Phase 3: Contract distribution workflow
 
 **Production URL**: https://simplicate-automations.vercel.app/admin/hours
-
-**Commands**:
-```bash
-npm run typecheck  # Run after edits
-npx vercel --prod --yes  # Deploy
-git add -A && git commit --no-verify -m "message" && git push  # Commit
-```
 
 ---
 
@@ -197,12 +204,18 @@ git add -A && git commit --no-verify -m "message" && git push  # Commit
 
 ## 📚 Previous Session Notes
 
+**Session: November 26, 2025 - Multi-Select & Presets**
+- Added multi-select filters to Hours page
+- Created filter presets system with database storage
+- Fixed hours sync (pagination, date field)
+- Fixed favicon 404
+- Expanded Simplicate API client
+
 **Session: November 25, 2025, 4:00 PM - Hours Page Redesign**
 - Redesigned hours page with project/client focus
 - Added filtering (month, project, employee) and sorting
 - Created 4 new router endpoints
 - Updated navigation sidebar
-- Added collapsible component
 
 **Session: November 25, 2025, 3:25 PM - Phase 2 Complete**
 - Phase 2 webhooks infrastructure complete
@@ -227,7 +240,7 @@ git add -A && git commit --no-verify -m "message" && git push  # Commit
 
 ---
 
-**Session Complexity**: Standard (4 files modified, UI redesign + router updates)
+**Session Complexity**: Complex (11 files modified, major feature addition)
 **Build Status**: ✅ Typecheck passes
 **Deployment Status**: ✅ Vercel production deployed
 
