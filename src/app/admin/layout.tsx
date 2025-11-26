@@ -13,6 +13,7 @@ import {
   Clock,
   FileText,
   Receipt,
+  DollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -40,14 +41,19 @@ const navItems = [
     icon: FolderKanban,
   },
   {
+    title: 'People',
+    href: '/admin/users',
+    icon: Users,
+  },
+  {
     title: 'Hours',
     href: '/admin/hours',
     icon: Clock,
   },
   {
-    title: 'People',
-    href: '/admin/users',
-    icon: Users,
+    title: 'Rates',
+    href: '/admin/rates',
+    icon: DollarSign,
   },
   {
     title: 'Contracts',

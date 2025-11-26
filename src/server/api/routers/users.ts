@@ -42,6 +42,14 @@ export const usersRouter = createTRPCRouter({
             image: true,
             createdAt: true,
             simplicateEmployeeId: true,
+            // Rate fields
+            employeeType: true,
+            defaultSalesRate: true,
+            defaultCostRate: true,
+            salesRateOverride: true,
+            costRateOverride: true,
+            simplicateEmployeeType: true,
+            ratesSyncedAt: true,
             _count: {
               select: {
                 contracts: true,

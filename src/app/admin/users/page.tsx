@@ -129,11 +129,10 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Simplicate ID</TableHead>
-                  <TableHead>Contracts</TableHead>
-                  <TableHead>Hours</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Sales Rate</TableHead>
+                  <TableHead className="text-right">Cost Rate</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -155,30 +154,47 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={user.role === 'ADMIN' ? 'default' : 'secondary'}
-                        className="font-medium"
-                      >
-                        {user.role === 'ADMIN' ? 'Admin' : 'Team Member'}
-                      </Badge>
+                      {user.simplicateEmployeeType ? (
+                        <Badge
+                          variant={user.simplicateEmployeeType === 'external' ? 'outline' : 'secondary'}
+                          className="font-medium"
+                        >
+                          {user.simplicateEmployeeType}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <span className="text-muted-foreground text-sm font-mono">
-                        {user.simplicateEmployeeId ?? '—'}
-                      </span>
+                    <TableCell className="text-right">
+                      {user.salesRateOverride ?? user.defaultSalesRate ? (
+                        <div className="flex flex-col items-end">
+                          <span className="font-medium">
+                            €{(user.salesRateOverride ?? user.defaultSalesRate)?.toFixed(2)}
+                          </span>
+                          {user.salesRateOverride && (
+                            <span className="text-xs text-muted-foreground">override</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <span className="text-muted-foreground">{user._count.contracts}</span>
+                    <TableCell className="text-right">
+                      {user.costRateOverride ?? user.defaultCostRate ? (
+                        <div className="flex flex-col items-end">
+                          <span className="font-medium">
+                            €{(user.costRateOverride ?? user.defaultCostRate)?.toFixed(2)}
+                          </span>
+                          {user.costRateOverride && (
+                            <span className="text-xs text-muted-foreground">override</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right">
                       <span className="text-muted-foreground">{user._count.hoursEntries}</span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(user.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
