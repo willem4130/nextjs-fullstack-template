@@ -104,14 +104,18 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
+          // Parse rate strings to numbers (Simplicate returns them as strings like "135.00")
+          const salesRate = employee.hourly_sales_tariff ? parseFloat(String(employee.hourly_sales_tariff)) : null
+          const costRate = employee.hourly_cost_tariff ? parseFloat(String(employee.hourly_cost_tariff)) : null
+
           const userData = {
             email: employeeEmail,
             name: employeeName,
             simplicateEmployeeId: employee.id,
             role: 'TEAM_MEMBER' as const,
-            // Financial rate fields from Simplicate
-            defaultSalesRate: employee.hourly_sales_tariff || null,
-            defaultCostRate: employee.hourly_cost_tariff || null,
+            // Financial rate fields from Simplicate (parsed from string)
+            defaultSalesRate: salesRate && salesRate > 0 ? salesRate : null,
+            defaultCostRate: costRate && costRate > 0 ? costRate : null,
             simplicateEmployeeType: employee.type?.label || null,
             ratesSyncedAt: new Date(),
           }

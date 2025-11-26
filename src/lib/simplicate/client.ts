@@ -46,9 +46,9 @@ export interface SimplicateEmployee {
     full_name?: string;
     email?: string;
   };
-  // Financial rate fields
-  hourly_sales_tariff?: number;
-  hourly_cost_tariff?: number;
+  // Financial rate fields (returned as strings by Simplicate API)
+  hourly_sales_tariff?: string | number;
+  hourly_cost_tariff?: string | number;
   // Employee type (internal/external)
   type?: {
     id?: string;
