@@ -1,14 +1,14 @@
 # Session State - Simplicate Automation System
 
-**Last Updated**: November 26, 2025, 4:50 PM
+**Last Updated**: November 26, 2025, 5:30 PM
 **Session Type**: Complex
-**Project**: Simplicate Automation System for contract distribution, hours reminders, and invoice generation
+**Project**: Simplicate Automation System - Financial Tracking Phase
 
 ---
 
 ## 🎯 Current Objective
 
-Enhanced Hours page with multi-select filters and saveable filter presets. Also fixed hours sync pagination and date field issue.
+Building a comprehensive Financial Tracking System to track revenue, costs, and margins at project-service-employee level. Syncing employee rates from Simplicate (hourly_cost_tariff, hourly_sales_tariff).
 
 ---
 
@@ -16,153 +16,113 @@ Enhanced Hours page with multi-select filters and saveable filter presets. Also 
 
 ### ✅ Completed Tasks
 
-- **Multi-Select Filters - COMPLETE**
-  - Months multi-select (select multiple months at once)
-  - Projects multi-select with client grouping
-  - Employees multi-select with search
-  - New reusable MultiSelect component created
+- **Financial Tracking Documentation - COMPLETE**
+  - Created `docs/project/FINANCIAL-TRACKING-PLAN.md` (8-phase plan)
+  - Created `docs/project/FINANCIAL-TRACKING-TASKS.md` (task tracking)
+  - Updated `CLAUDE.md` with Financial Tracking phase
 
-- **Filter Presets System - COMPLETE**
-  - Quick access bar with one-click preset loading
-  - Save current filters as named preset
-  - Preset management: load, update, rename, delete
-  - Set default preset (auto-loads on page visit)
-  - Database model for presets (FilterPreset)
-  - tRPC router for CRUD operations
+- **Phase 0: Hours Sync Date Bug Fix - COMPLETE**
+  - Fixed date validation in syncHours() to skip Invalid Date entries
+  - Deployed to production
 
-- **Hours Sync Fixes - COMPLETE**
-  - Fixed pagination (getAllHours with proper pagination)
-  - Fixed date field (Simplicate uses start_date not date)
-  - Fixed filter syntax (q[field][operator] format)
-
-- **Simplicate API Expansion - COMPLETE**
-  - Added hours approval endpoints
-  - Added employee expenses endpoint
-  - Added costs/expenses endpoint
-  - Added mileage endpoint
-  - Added CRM organizations endpoint
-
-- **Bug Fixes - COMPLETE**
-  - Fixed favicon.ico 404 (added icon.svg)
+- **Phase 1: Schema Extensions - PARTIALLY COMPLETE**
+  - Added `EmployeeType` enum (CO_OWNER, FREELANCER, INTERNAL)
+  - Added User financial fields: `employeeType`, `defaultSalesRate`, `defaultCostRate`, `salesRateOverride`, `costRateOverride`, `ratesSyncedAt`, `simplicateEmployeeType`
+  - Updated ProjectMember: added `salesRate`, `costRate`, `salesRateSource`, `costRateSource`
 
 ### 🚧 In Progress
 
-- User testing new multi-select filters and presets
+- **Phase 1: Schema Extensions (remaining)**
+  - Need to add HoursEntry financial fields (revenue, cost, margin, rateSource)
+  - Need to create ServiceEmployeeRate model
+  - Need to run db:push
 
 ### 📋 Pending Tasks
 
-**Future Phases**:
-- Phase 3: Contract distribution workflow
-- Phase 4: Hours reminders with budget insights
-- Phase 5: Purchasing invoices (hours + km + expenses)
-- Phase 6: Expense tracking
-- Phase 7: Management dashboards
-- Phase 8: Employee self-service portal
+- Phase 1: Update syncEmployees() for rate fields
+- Phase 1: Update SimplicateEmployee interface
+- Phase 2: Create rate resolution system
+- Phase 3: Enhanced hours sync with financials
+- Phase 4: Financial dashboard (/admin/financials)
+- Phase 5-8: Hours enhancement, employee views, invoice matching, rate UI
 
 ---
 
 ## 🔑 Key Decisions Made
 
-**Multi-Select Approach**
-- **Choice**: Custom MultiSelect component using shadcn Command + Popover
-- **Rationale**: Standard shadcn doesn't have multi-select, Command provides search
-- **Impact**: Reusable component for other pages
+**Rate Hierarchy**
+- **Choice**: ServiceEmployee → ProjectMember → User Override → User Default → Simplicate snapshot
+- **Rationale**: Most specific rate takes precedence
+- **Impact**: Flexible rate management at any level
 
-**Preset Storage**
-- **Choice**: Database-backed with planned localStorage fallback
-- **Rationale**: User wanted both (synced when logged in, local when not)
-- **Impact**: Presets persist across sessions and devices
+**Dual Rate Model**
+- **Choice**: Store both salesRate (revenue) and costRate (cost) at each level
+- **Rationale**: Need both for margin calculations
+- **Impact**: Complete financial tracking
 
-**Hours Router Enhancement**
-- **Choice**: Support both single and array params (backwards compatible)
-- **Rationale**: Existing code keeps working, new multi-select uses arrays
-- **Impact**: No breaking changes to existing functionality
+**Co-owner Purchase Rate**
+- **Choice**: Default 10% discount from sales rate, with manual override
+- **Rationale**: User's business model requires different rates for internal BV invoicing
+- **Impact**: Accurate margin tracking for co-owners
 
-**Simplicate Date Field**
-- **Choice**: Use start_date with fallback to date
-- **Rationale**: Simplicate API returns start_date for hours entries
-- **Impact**: Hours sync now works correctly
+**Simplicate Rate Sync**
+- **Choice**: Sync hourly_cost_tariff → defaultCostRate, hourly_sales_tariff → defaultSalesRate
+- **Rationale**: Simplicate is source of truth, app allows overrides
+- **Impact**: Rates auto-populate but can be manually adjusted
 
 ---
 
 ## 📁 Files Modified
 
 ### Created
-- `src/components/ui/multi-select.tsx` - Reusable searchable multi-select
-- `src/components/ui/popover.tsx` - shadcn popover component
-- `src/components/ui/checkbox.tsx` - shadcn checkbox component
-- `src/components/ui/command.tsx` - shadcn command component
-- `src/server/api/routers/filterPresets.ts` - Filter presets CRUD router
-- `src/app/icon.svg` - Favicon
+- `docs/project/FINANCIAL-TRACKING-PLAN.md` - Full 8-phase implementation plan
+- `docs/project/FINANCIAL-TRACKING-TASKS.md` - Task progress tracking
 
 ### Modified
-- `src/app/admin/hours/page.tsx` - Complete rewrite with multi-select and presets
-- `src/server/api/routers/hours.ts` - Multi-value filter support
-- `src/server/api/routers/sync.ts` - Hours sync fixes (pagination, date)
-- `src/server/api/root.ts` - Added filterPresets router
-- `src/lib/simplicate/client.ts` - Added new API endpoints
-- `prisma/schema.prisma` - Added FilterPreset model
-- `CLAUDE.md` - Updated API reference
-- `docs/project/IMPLEMENTATION-PLAN.md` - Updated progress
+- `CLAUDE.md` - Added Financial Tracking phase, documentation references
+- `prisma/schema.prisma` - Added EmployeeType enum, User financial fields, ProjectMember rate fields
+- `src/server/api/routers/sync.ts` - Fixed date validation in syncHours()
 
 ---
 
-## 🏗️ Patterns & Architecture
+## 🏗️ Schema Changes
 
-**Components Added**:
-
-1. **MultiSelect Component**
-   - Props: options, selected, onChange, placeholder, icon
-   - Supports option grouping by category
-   - Searchable with Command component
-   - Shows badges for selected items
-
-2. **Filter Presets System**
-   - Database model: FilterPreset (id, userId, name, page, filters, isDefault)
-   - Router: getAll, getDefault, create, update, delete, setDefault
-   - UI: Quick access bar + management dropdown
-
-**Router Enhancements**:
-```
-hours.getProjectsSummary now accepts:
-  - months: string[] (multiple months)
-  - projectIds: string[] (multiple projects)
-  - employeeIds: string[] (multiple employees)
-  - Backwards compatible with single values
+**New Enum**:
+```prisma
+enum EmployeeType {
+  CO_OWNER
+  FREELANCER
+  INTERNAL
+}
 ```
 
-**Simplicate Client New Endpoints**:
-```
-getHoursApproval()
-getHoursApprovalStatuses()
-getHoursTypes()
-getEmployeeExpenses()
-getCostTypes()
-getExpenses()
-getMileage()
-getOrganizations()
-```
+**User Model Additions**:
+- `employeeType`, `defaultSalesRate`, `defaultCostRate`
+- `salesRateOverride`, `costRateOverride`, `ratesSyncedAt`
+- `simplicateEmployeeType`, `serviceEmployeeRates` relation
+
+**ProjectMember Additions**:
+- `salesRate`, `costRate`, `salesRateSource`, `costRateSource`
+
+**Still Need to Add**:
+- HoursEntry: `costRate`, `revenue`, `cost`, `margin`, `rateSource`, `purchaseInvoiceId`
+- ServiceEmployeeRate model (most granular rate level)
+- ProjectService: `hourTypeTariffs` JSON, `employeeRates` relation
 
 ---
 
 ## 💡 Context & Notes
 
-**Important Context**:
-- Production URL: https://simplicate-automations.vercel.app/
-- Hours page at: /admin/hours
-- Database schema needs migration for FilterPreset (auto on Vercel)
+**Simplicate API Rate Fields**:
+- Employee: `hourly_cost_tariff`, `hourly_sales_tariff`, `type.label`
+- Hours: `tariff`, `employee_tariff`, `type_tariff`
+- Services: `hour_types[].tariff`, `hour_types[].budgeted_amount`
 
-**Key Features**:
-- Multi-select dropdowns for months, projects, employees
-- Presets shown as quick-access buttons above filters
-- Save/Load/Rename/Delete/Set Default for presets
-- Default preset auto-loads on page visit
-- Clear button to reset all filters
+**Key Documentation**:
+- Full plan: `docs/project/FINANCIAL-TRACKING-PLAN.md`
+- Task tracking: `docs/project/FINANCIAL-TRACKING-TASKS.md`
 
-**Simplicate API Notes**:
-- Hours use `start_date` not `date`
-- Filter syntax: `q[field][operator]=value`
-- Pagination: `offset=X&limit=Y`
+**Production URL**: https://simplicate-automations.vercel.app/
 
 ---
 
@@ -172,31 +132,38 @@ getOrganizations()
 
 ---
 
-I'm continuing work on Simplicate Automations. Here's where we left off:
+I'm continuing work on the Financial Tracking System for Simplicate Automations.
 
-**Current Goal**: User is testing multi-select filters and filter presets on Hours page.
+**Read these files first**:
+- `docs/project/FINANCIAL-TRACKING-PLAN.md` (full plan)
+- `docs/project/FINANCIAL-TRACKING-TASKS.md` (progress)
+- `CLAUDE.md` (project overview)
+
+**Current Goal**: Complete Phase 1 schema extensions and employee rate sync.
 
 **Just Completed**:
-- ✅ Multi-select filters (months, projects, employees)
-- ✅ Filter presets system (save, load, rename, delete, set default)
-- ✅ Quick access bar for presets
-- ✅ Fixed hours sync (pagination + date field)
-- ✅ Fixed favicon 404
-- ✅ Expanded Simplicate API client
+- ✅ Documentation files created
+- ✅ Phase 0: Fixed hours sync date bug
+- ✅ Added EmployeeType enum to schema
+- ✅ Added User financial fields (defaultSalesRate, defaultCostRate, overrides)
+- ✅ Added ProjectMember rate fields (salesRate, costRate, sources)
 
-**Key Files Changed**:
-- `src/app/admin/hours/page.tsx` - Multi-select filters + presets UI
-- `src/components/ui/multi-select.tsx` - Reusable component
-- `src/server/api/routers/filterPresets.ts` - Presets CRUD
-- `src/server/api/routers/hours.ts` - Multi-value support
-- `src/server/api/routers/sync.ts` - Hours sync fixes
+**Next Steps** (in order):
+1. Add HoursEntry financial fields to schema (costRate, revenue, cost, margin, rateSource)
+2. Create ServiceEmployeeRate model in schema
+3. Run `npm run db:push` to apply schema changes
+4. Update SimplicateEmployee interface in client.ts
+5. Update syncEmployees() to fetch/store rate fields
 
-**Next**:
-- Await user feedback on filters/presets
-- May need localStorage fallback for presets
-- Phase 3: Contract distribution workflow
+**Key Files**:
+- `prisma/schema.prisma` - Schema changes (partially done)
+- `src/server/api/routers/sync.ts` - Sync logic to update
+- `src/lib/simplicate/client.ts` - API types to update
 
-**Production URL**: https://simplicate-automations.vercel.app/admin/hours
+**Commands**:
+- `npm run typecheck` after edits
+- `npm run db:push` after schema changes
+- `/commit` and `npx vercel --prod --yes` after milestones
 
 ---
 
@@ -204,44 +171,29 @@ I'm continuing work on Simplicate Automations. Here's where we left off:
 
 ## 📚 Previous Session Notes
 
-**Session: November 26, 2025 - Multi-Select & Presets**
+**Session: November 26, 2025, 5:30 PM - Financial Tracking Start**
+- Created comprehensive Financial Tracking plan (8 phases)
+- Fixed hours sync date bug (Invalid Date handling)
+- Started schema extensions for financial tracking
+- Added EmployeeType enum and User/ProjectMember rate fields
+
+**Session: November 26, 2025, 4:50 PM - Multi-Select & Presets**
 - Added multi-select filters to Hours page
 - Created filter presets system with database storage
 - Fixed hours sync (pagination, date field)
 - Fixed favicon 404
 - Expanded Simplicate API client
 
-**Session: November 25, 2025, 4:00 PM - Hours Page Redesign**
+**Session: November 25, 2025 - Hours Page & Phase 2**
 - Redesigned hours page with project/client focus
-- Added filtering (month, project, employee) and sorting
-- Created 4 new router endpoints
-- Updated navigation sidebar
-
-**Session: November 25, 2025, 3:25 PM - Phase 2 Complete**
 - Phase 2 webhooks infrastructure complete
 - Queue processor cron implemented
-- Queue monitor UI on Automation page
-
-**Session: November 25, 2025 - Phase 1 Foundation**
-- Completed all Phase 1 tasks
-- Created 3 admin pages (contracts, hours, invoices)
-- Created 2 routers (hours.ts, invoices.ts)
 - Added 6 Prisma models, 5 enums
-
-**Session: November 21, 2025 - Workflow Config UI**
-- Built Workflows page UI with project selection
-- Added Settings page sync functionality
-- Fixed Vercel deployment (Neon Postgres setup)
-
-**Session: November 20, 2025 - Backend Automation**
-- Built complete backend automation engine
-- Implemented Simplicate API client
-- Created notification system (Email/Slack)
 
 ---
 
-**Session Complexity**: Complex (11 files modified, major feature addition)
+**Session Complexity**: Complex (major feature - Financial Tracking System)
 **Build Status**: ✅ Typecheck passes
-**Deployment Status**: ✅ Vercel production deployed
+**Deployment Status**: ✅ Latest deployed to Vercel
 
 ---
