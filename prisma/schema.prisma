@@ -734,3 +734,23 @@ model WorkflowQueue {
   @@index([status, scheduledFor])
   @@index([workflowType])
 }
+
+// ==========================================
+// FILTER PRESETS
+// ==========================================
+
+model FilterPreset {
+  id          String   @id @default(cuid())
+  userId      String?  // Null = shared/system preset
+
+  name        String
+  page        String   // e.g., "hours", "invoices", "contracts"
+  filters     Json     // { months: [], projects: [], employees: [], sortBy, sortOrder }
+  isDefault   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, page])
+  @@index([page])
+}

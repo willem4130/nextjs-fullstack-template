@@ -25,6 +25,24 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Clock,
   Loader2,
   RefreshCw,
@@ -36,13 +54,20 @@ import {
   Calendar,
   ArrowUpDown,
   TrendingUp,
+  Save,
+  Star,
+  MoreHorizontal,
+  Trash2,
+  Pencil,
+  X,
 } from 'lucide-react'
 import { api } from '@/trpc/react'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select'
 
 // Generate month options for the last 12 months
-function getMonthOptions() {
-  const options: { value: string; label: string }[] = []
+function getMonthOptions(): MultiSelectOption[] {
+  const options: MultiSelectOption[] = []
   const now = new Date()
   for (let i = 0; i < 12; i++) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -63,29 +88,69 @@ function getBudgetStatus(percentage: number | null) {
   return { label: 'On track', variant: 'outline' as const, color: 'text-green-600' }
 }
 
-export default function HoursPage() {
-  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]?.value || '')
-  const [projectFilter, setProjectFilter] = useState<string>('all')
-  const [employeeFilter, setEmployeeFilter] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'client' | 'project' | 'hours' | 'budget'>('client')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
+// Types for filter state
+interface FilterState {
+  months: string[]
+  projects: string[]
+  employees: string[]
+  sortBy: 'client' | 'project' | 'hours' | 'budget'
+  sortOrder: 'asc' | 'desc'
+}
 
+const defaultFilters: FilterState = {
+  months: [monthOptions[0]?.value || ''],
+  projects: [],
+  employees: [],
+  sortBy: 'client',
+  sortOrder: 'asc',
+}
+
+// LocalStorage key
+const PRESETS_STORAGE_KEY = 'hours-filter-presets'
+
+export default function HoursPage() {
+  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [newPresetName, setNewPresetName] = useState('')
+  const [editingPreset, setEditingPreset] = useState<{ id: string; name: string } | null>(null)
+
+  // Fetch data
   const { data: projectsSummary, isLoading } = api.hours.getProjectsSummary.useQuery({
-    month: selectedMonth,
-    projectId: projectFilter !== 'all' ? projectFilter : undefined,
-    employeeId: employeeFilter !== 'all' ? employeeFilter : undefined,
-    sortBy,
-    sortOrder,
+    months: filters.months,
+    projectIds: filters.projects.length > 0 ? filters.projects : undefined,
+    employeeIds: filters.employees.length > 0 ? filters.employees : undefined,
+    sortBy: filters.sortBy,
+    sortOrder: filters.sortOrder,
   })
 
   const { data: projects } = api.hours.getProjectsForFilter.useQuery()
   const { data: employees } = api.hours.getEmployeesForFilter.useQuery()
   const { data: monthlyTotals } = api.hours.getMonthlyTotals.useQuery({ months: 6 })
+  const { data: presets, refetch: refetchPresets } = api.filterPresets.getAll.useQuery({ page: 'hours' })
+  const { data: defaultPreset } = api.filterPresets.getDefault.useQuery({ page: 'hours' })
 
   const syncHours = api.sync.syncHours.useMutation()
   const syncServices = api.sync.syncServices.useMutation()
+  const createPreset = api.filterPresets.create.useMutation()
+  const updatePreset = api.filterPresets.update.useMutation()
+  const deletePreset = api.filterPresets.delete.useMutation()
+  const setDefaultPreset = api.filterPresets.setDefault.useMutation()
   const utils = api.useUtils()
+
+  // Load default preset on mount
+  useEffect(() => {
+    if (defaultPreset?.filters) {
+      const savedFilters = defaultPreset.filters as unknown as FilterState
+      setFilters({
+        months: savedFilters.months || defaultFilters.months,
+        projects: savedFilters.projects || [],
+        employees: savedFilters.employees || [],
+        sortBy: savedFilters.sortBy || 'client',
+        sortOrder: savedFilters.sortOrder || 'asc',
+      })
+    }
+  }, [defaultPreset])
 
   const handleSyncAll = async () => {
     try {
@@ -111,7 +176,111 @@ export default function HoursPage() {
     })
   }
 
-  const currentMonthLabel = monthOptions.find(m => m.value === selectedMonth)?.label || selectedMonth
+  // Convert projects and employees to MultiSelect options
+  const projectOptions: MultiSelectOption[] = (projects || []).map(p => ({
+    value: p.id,
+    label: p.clientName ? `${p.clientName} - ${p.name}` : p.name,
+    group: p.clientName || 'No client',
+  }))
+
+  const employeeOptions: MultiSelectOption[] = (employees || []).map(e => ({
+    value: e.id,
+    label: e.name || e.email,
+  }))
+
+  // Get display label for months
+  const getMonthsLabel = useCallback(() => {
+    if (filters.months.length === 0) return 'All months'
+    if (filters.months.length === 1) {
+      return monthOptions.find(m => m.value === filters.months[0])?.label || filters.months[0]
+    }
+    return `${filters.months.length} months`
+  }, [filters.months])
+
+  // Save preset
+  const handleSavePreset = async () => {
+    if (!newPresetName.trim()) return
+
+    try {
+      await createPreset.mutateAsync({
+        name: newPresetName.trim(),
+        page: 'hours',
+        filters,
+      })
+      await refetchPresets()
+      setSaveDialogOpen(false)
+      setNewPresetName('')
+    } catch (error) {
+      console.error('Failed to save preset:', error)
+    }
+  }
+
+  // Load preset
+  const loadPreset = (preset: { filters: unknown }) => {
+    const savedFilters = preset.filters as FilterState
+    setFilters({
+      months: savedFilters.months || defaultFilters.months,
+      projects: savedFilters.projects || [],
+      employees: savedFilters.employees || [],
+      sortBy: savedFilters.sortBy || 'client',
+      sortOrder: savedFilters.sortOrder || 'asc',
+    })
+  }
+
+  // Update preset
+  const handleUpdatePreset = async (id: string) => {
+    try {
+      await updatePreset.mutateAsync({ id, filters })
+      await refetchPresets()
+    } catch (error) {
+      console.error('Failed to update preset:', error)
+    }
+  }
+
+  // Delete preset
+  const handleDeletePreset = async (id: string) => {
+    try {
+      await deletePreset.mutateAsync({ id })
+      await refetchPresets()
+    } catch (error) {
+      console.error('Failed to delete preset:', error)
+    }
+  }
+
+  // Set as default
+  const handleSetDefault = async (id: string) => {
+    try {
+      await setDefaultPreset.mutateAsync({ id, page: 'hours' })
+      await refetchPresets()
+      utils.filterPresets.getDefault.invalidate({ page: 'hours' })
+    } catch (error) {
+      console.error('Failed to set default:', error)
+    }
+  }
+
+  // Rename preset
+  const handleRenamePreset = async () => {
+    if (!editingPreset || !editingPreset.name.trim()) return
+
+    try {
+      await updatePreset.mutateAsync({ id: editingPreset.id, name: editingPreset.name.trim() })
+      await refetchPresets()
+      setEditingPreset(null)
+    } catch (error) {
+      console.error('Failed to rename preset:', error)
+    }
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters(defaultFilters)
+  }
+
+  const hasActiveFilters = filters.months.length > 1 ||
+    filters.projects.length > 0 ||
+    filters.employees.length > 0 ||
+    filters.sortBy !== 'client' ||
+    filters.sortOrder !== 'asc'
 
   return (
     <div className="space-y-6">
@@ -119,7 +288,7 @@ export default function HoursPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Hours Overview</h1>
-          <p className="text-muted-foreground">Hours by project, dienst and employee per month</p>
+          <p className="text-muted-foreground">Hours by project, dienst and employee</p>
         </div>
         <Button onClick={handleSyncAll} disabled={isSyncing}>
           {isSyncing ? (
@@ -131,66 +300,78 @@ export default function HoursPage() {
         </Button>
       </div>
 
+      {/* Preset Bar */}
+      {presets && presets.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-muted-foreground">Quick filters:</span>
+          {presets.map((preset) => (
+            <Button
+              key={preset.id}
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={() => loadPreset(preset)}
+            >
+              {preset.isDefault && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />}
+              {preset.name}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            {/* Month selector */}
+            {/* Month selector (multi) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Month</label>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[200px]">
-                  <Calendar className="mr-2 h-4 w-4" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium text-muted-foreground">Months</label>
+              <MultiSelect
+                options={monthOptions}
+                selected={filters.months}
+                onChange={(months) => setFilters(f => ({ ...f, months }))}
+                placeholder="Select months"
+                searchPlaceholder="Search months..."
+                className="w-[220px]"
+                icon={<Calendar className="h-4 w-4" />}
+              />
             </div>
 
-            {/* Project filter */}
+            {/* Project filter (multi) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Project</label>
-              <Select value={projectFilter} onValueChange={setProjectFilter}>
-                <SelectTrigger className="w-[220px]">
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="All projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All projects</SelectItem>
-                  {projects?.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.clientName ? `${p.clientName} - ${p.name}` : p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium text-muted-foreground">Projects</label>
+              <MultiSelect
+                options={projectOptions}
+                selected={filters.projects}
+                onChange={(projects) => setFilters(f => ({ ...f, projects }))}
+                placeholder="All projects"
+                searchPlaceholder="Search projects..."
+                className="w-[240px]"
+                icon={<FolderOpen className="h-4 w-4" />}
+              />
             </div>
 
-            {/* Employee filter */}
+            {/* Employee filter (multi) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Employee</label>
-              <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <Users className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="All employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All employees</SelectItem>
-                  {employees?.map(e => (
-                    <SelectItem key={e.id} value={e.id}>{e.name || e.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium text-muted-foreground">Employees</label>
+              <MultiSelect
+                options={employeeOptions}
+                selected={filters.employees}
+                onChange={(employees) => setFilters(f => ({ ...f, employees }))}
+                placeholder="All employees"
+                searchPlaceholder="Search employees..."
+                className="w-[200px]"
+                icon={<Users className="h-4 w-4" />}
+              />
             </div>
 
             {/* Sort by */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-muted-foreground">Sort by</label>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <Select
+                value={filters.sortBy}
+                onValueChange={(v) => setFilters(f => ({ ...f, sortBy: v as FilterState['sortBy'] }))}
+              >
                 <SelectTrigger className="w-[150px]">
                   <ArrowUpDown className="mr-2 h-4 w-4" />
                   <SelectValue />
@@ -207,7 +388,10 @@ export default function HoursPage() {
             {/* Sort order */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-muted-foreground">Order</label>
-              <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as typeof sortOrder)}>
+              <Select
+                value={filters.sortOrder}
+                onValueChange={(v) => setFilters(f => ({ ...f, sortOrder: v as FilterState['sortOrder'] }))}
+              >
                 <SelectTrigger className="w-[130px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -217,7 +401,124 @@ export default function HoursPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-muted-foreground">&nbsp;</label>
+              <div className="flex gap-2">
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    <X className="mr-1 h-4 w-4" />
+                    Clear
+                  </Button>
+                )}
+
+                <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Save className="mr-1 h-4 w-4" />
+                      Save
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Save Filter Preset</DialogTitle>
+                      <DialogDescription>
+                        Save current filters as a preset for quick access later.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="preset-name">Preset name</Label>
+                        <Input
+                          id="preset-name"
+                          placeholder="e.g., Last Quarter, My Projects"
+                          value={newPresetName}
+                          onChange={(e) => setNewPresetName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSavePreset} disabled={!newPresetName.trim()}>
+                        Save Preset
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
           </div>
+
+          {/* Preset management */}
+          {presets && presets.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted-foreground">Manage presets:</span>
+                {presets.map((preset) => (
+                  <div key={preset.id} className="flex items-center">
+                    {editingPreset?.id === preset.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          className="h-7 w-32"
+                          value={editingPreset.name}
+                          onChange={(e) => setEditingPreset({ ...editingPreset, name: e.target.value })}
+                          onKeyDown={(e) => e.key === 'Enter' && handleRenamePreset()}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={handleRenamePreset}>
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingPreset(null)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 gap-1">
+                            {preset.isDefault && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />}
+                            {preset.name}
+                            <MoreHorizontal className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => loadPreset(preset)}>
+                            Load preset
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdatePreset(preset.id)}>
+                            Update with current filters
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setEditingPreset({ id: preset.id, name: preset.name })}>
+                            <Pencil className="mr-2 h-3 w-3" />
+                            Rename
+                          </DropdownMenuItem>
+                          {!preset.isDefault && (
+                            <DropdownMenuItem onClick={() => handleSetDefault(preset.id)}>
+                              <Star className="mr-2 h-3 w-3" />
+                              Set as default
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => handleDeletePreset(preset.id)}
+                          >
+                            <Trash2 className="mr-2 h-3 w-3" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -225,11 +526,12 @@ export default function HoursPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Hours in {currentMonthLabel}</CardTitle>
+            <CardTitle className="text-sm font-medium">Hours Selected</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{projectsSummary?.totals.hoursThisMonth.toFixed(1) || '0'}</div>
+            <p className="text-xs text-muted-foreground">{getMonthsLabel()}</p>
           </CardContent>
         </Card>
         <Card>
@@ -269,7 +571,7 @@ export default function HoursPage() {
       {/* Projects List */}
       <Card>
         <CardHeader>
-          <CardTitle>Projects - {currentMonthLabel}</CardTitle>
+          <CardTitle>Projects - {getMonthsLabel()}</CardTitle>
           <CardDescription>
             Hours breakdown per project, dienst, and employee
           </CardDescription>
@@ -284,9 +586,9 @@ export default function HoursPage() {
               <Clock className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg">No hours found</h3>
               <p className="text-muted-foreground">
-                No hours logged for {currentMonthLabel}
-                {projectFilter !== 'all' && ' in selected project'}
-                {employeeFilter !== 'all' && ' by selected employee'}
+                No hours logged for selected period
+                {filters.projects.length > 0 && ' in selected projects'}
+                {filters.employees.length > 0 && ' by selected employees'}
               </p>
               <Button variant="outline" className="mt-4" onClick={handleSyncAll} disabled={isSyncing}>
                 {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -325,9 +627,8 @@ export default function HoursPage() {
                         <div className="flex items-center gap-4">
                           <div className="text-right">
                             <p className="font-semibold">{project.totalHoursThisMonth.toFixed(1)}h</p>
-                            <p className="text-xs text-muted-foreground">this month</p>
+                            <p className="text-xs text-muted-foreground">selected period</p>
                           </div>
-                          {/* Show worst budget status */}
                           {(() => {
                             const maxBudget = Math.max(...project.services.map(s => s.budgetPercentage || 0))
                             const status = getBudgetStatus(maxBudget > 0 ? maxBudget : null)
@@ -347,7 +648,6 @@ export default function HoursPage() {
                           const status = getBudgetStatus(service.budgetPercentage)
                           return (
                             <div key={service.id} className="border-b last:border-b-0 p-4">
-                              {/* Service header */}
                               <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                   <FolderOpen className="h-4 w-4 text-muted-foreground" />
@@ -356,13 +656,12 @@ export default function HoursPage() {
                                 <div className="flex items-center gap-4">
                                   <span className="text-sm">
                                     <span className="font-medium">{service.hoursThisMonth.toFixed(1)}h</span>
-                                    <span className="text-muted-foreground"> this month</span>
+                                    <span className="text-muted-foreground"> selected</span>
                                   </span>
                                   <Badge variant={status.variant}>{status.label}</Badge>
                                 </div>
                               </div>
 
-                              {/* Budget progress */}
                               {service.budgetHours && service.budgetHours > 0 && (
                                 <div className="mb-4 space-y-1.5">
                                   <div className="flex justify-between text-sm">
@@ -377,13 +676,12 @@ export default function HoursPage() {
                                   />
                                   {service.monthPercentageOfBudget !== null && (
                                     <p className="text-xs text-muted-foreground">
-                                      This month: {service.monthPercentageOfBudget}% of total budget
+                                      Selection: {service.monthPercentageOfBudget}% of total budget
                                     </p>
                                   )}
                                 </div>
                               )}
 
-                              {/* Employee breakdown */}
                               {service.employees.length > 0 && (
                                 <Table>
                                   <TableHeader>

@@ -250,30 +250,55 @@ export const hoursRouter = createTRPCRouter({
   getProjectsSummary: publicProcedure
     .input(
       z.object({
-        month: z.string().optional(), // Format: YYYY-MM
-        projectId: z.string().optional(),
-        employeeId: z.string().optional(),
+        months: z.array(z.string()).optional(), // Format: YYYY-MM (multiple)
+        month: z.string().optional(), // Legacy single month support
+        projectIds: z.array(z.string()).optional(), // Multiple projects
+        projectId: z.string().optional(), // Legacy single project support
+        employeeIds: z.array(z.string()).optional(), // Multiple employees
+        employeeId: z.string().optional(), // Legacy single employee support
         sortBy: z.enum(['client', 'project', 'hours', 'budget']).default('client'),
         sortOrder: z.enum(['asc', 'desc']).default('asc'),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
       const now = new Date()
-      const currentMonth = input?.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-      const [year, month] = currentMonth.split('-').map(Number)
 
-      const startOfMonth = new Date(year!, month! - 1, 1)
-      const endOfMonth = new Date(year!, month!, 0, 23, 59, 59)
+      // Support both single and multi-select (backwards compatible)
+      const selectedMonths = input?.months?.length
+        ? input.months
+        : input?.month
+          ? [input.month]
+          : [`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`]
+
+      const selectedProjects = input?.projectIds?.length
+        ? input.projectIds
+        : input?.projectId
+          ? [input.projectId]
+          : []
+
+      const selectedEmployees = input?.employeeIds?.length
+        ? input.employeeIds
+        : input?.employeeId
+          ? [input.employeeId]
+          : []
+
+      // Build date ranges for all selected months
+      const dateRanges: { gte: Date; lte: Date }[] = selectedMonths.map(m => {
+        const [year, month] = m.split('-').map(Number)
+        return {
+          gte: new Date(year!, month! - 1, 1),
+          lte: new Date(year!, month!, 0, 23, 59, 59),
+        }
+      })
 
       // Build where clause for hours
       const hoursWhere: Prisma.HoursEntryWhereInput = {
-        date: {
-          gte: startOfMonth,
-          lte: endOfMonth,
-        },
+        OR: dateRanges.map(range => ({
+          date: range,
+        })),
       }
-      if (input?.projectId) hoursWhere.projectId = input.projectId
-      if (input?.employeeId) hoursWhere.userId = input.employeeId
+      if (selectedProjects.length > 0) hoursWhere.projectId = { in: selectedProjects }
+      if (selectedEmployees.length > 0) hoursWhere.userId = { in: selectedEmployees }
 
       // Get all hours for the month grouped by project and service
       const hours = await ctx.db.hoursEntry.findMany({
@@ -397,7 +422,8 @@ export const hoursRouter = createTRPCRouter({
       })
 
       return {
-        month: currentMonth,
+        months: selectedMonths,
+        month: selectedMonths[0] || '', // Legacy support
         projects,
         totals: {
           hoursThisMonth: hours.reduce((sum, h) => sum + h.hours, 0),
