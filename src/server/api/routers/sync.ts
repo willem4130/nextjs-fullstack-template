@@ -399,13 +399,21 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
+          // Parse and validate the date
+          const parsedDate = new Date(dateStr)
+          if (isNaN(parsedDate.getTime())) {
+            // Invalid date - skip this entry
+            results.errors.push(`Invalid date for hours ${hours.id}: ${dateStr}`)
+            continue
+          }
+
           const hoursData = {
             projectId: project.id,
             userId: user.id,
             projectServiceId,
             simplicateHoursId: hours.id,
             hours: hours.hours,
-            date: new Date(dateStr),
+            date: parsedDate,
             description: hours.description || null,
             hourlyRate: hours.tariff || hours.hourly_rate || null,
             billable: hours.billable ?? true,

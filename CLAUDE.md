@@ -10,6 +10,8 @@ Production-ready automation system for Simplicate that handles contract distribu
 - `IMPLEMENTATION-PLAN.md` - Complete 8-phase plan with tasks
 - `SCHEMA-ADDITIONS.md` - Database models to add
 - `CONTINUATION-PROMPT.md` - Copy this prompt after clearing context
+- `FINANCIAL-TRACKING-PLAN.md` - Financial tracking system (revenue/costs/margins)
+- `FINANCIAL-TRACKING-TASKS.md` - Financial tracking task progress
 
 ## Current Status
 
@@ -33,18 +35,23 @@ Production-ready automation system for Simplicate that handles contract distribu
 - [x] Queue monitor UI on Automation page (tabs: Logs + Queue)
 - [x] Queue endpoints: getQueue, getQueueStats, processQueueNow, addTestQueueItem
 
-### Next - Phase 3 (Contracts)
-- [ ] Contract template management
-- [ ] Contract upload handler
-- [ ] Email with download/upload links
-- [ ] Reminder escalation (3, 7, 14 days)
+### Phase 3+ - Financial Tracking (IN PROGRESS)
+**Goal**: Track revenue, costs, and margins at project-service-employee level
 
-### Upcoming Phases
-- Phase 4: Hours reminders with budget insights
-- Phase 5: Purchasing invoices (hours + km + expenses)
-- Phase 6: Expense tracking
-- Phase 7: Management dashboards
-- Phase 8: Employee self-service portal
+- [ ] Phase 0: Fix hours sync date parsing bug
+- [ ] Phase 1: Schema extensions + employee rate sync (hourly_cost_tariff, hourly_sales_tariff)
+- [ ] Phase 2: Rate override system (user, project, service-employee levels)
+- [ ] Phase 3: Enhanced hours sync with revenue/cost/margin calculations
+- [ ] Phase 4: Financial dashboard (/admin/financials)
+- [ ] Phase 5: Hours page enhancements (rate, revenue columns)
+- [ ] Phase 6-8: Employee views, invoice matching, rate management UI
+
+**Task tracking**: See `docs/project/FINANCIAL-TRACKING-TASKS.md`
+
+### Future Phases (after Financial Tracking)
+- Contract template management
+- Hours reminders with budget insights
+- Employee self-service portal
 
 ## Project Structure
 
@@ -59,7 +66,8 @@ src/
 │   ├── settings/         # App settings + Simplicate sync
 │   ├── contracts/        # Contract management
 │   ├── hours/            # Hours tracking
-│   └── invoices/         # Invoice management
+│   ├── invoices/         # Invoice management
+│   └── financials/       # Financial dashboard (revenue/costs/margins)
 ├── server/api/routers/
 │   ├── sync.ts           # Simplicate sync (projects, employees, hours, invoices)
 │   ├── projects.ts       # Project CRUD
@@ -70,10 +78,13 @@ src/
 │   ├── hours.ts          # Hours queries and stats
 │   ├── invoices.ts       # Invoice queries and stats
 │   ├── dashboard.ts      # Dashboard stats
-│   └── settings.ts       # App settings
+│   ├── settings.ts       # App settings
+│   ├── financials.ts     # Financial queries (planned)
+│   └── rates.ts          # Rate overrides CRUD (planned)
 ├── lib/
 │   ├── simplicate/       # API client (projects, hours, invoices, docs)
 │   ├── workflows/        # Workflow execution logic
+│   ├── rates/            # Rate resolution logic (planned)
 │   └── notifications/    # Email (Resend) + Slack
 └── prisma/schema.prisma  # Database schema
 ```
