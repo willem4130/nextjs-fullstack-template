@@ -74,6 +74,17 @@ export const syncRouter = createTRPCRouter({
       // Fetch all employees from Simplicate
       const simplicateEmployees = await client.getEmployees({ limit: 100 })
 
+      // Log first employee to see what fields are available
+      if (simplicateEmployees.length > 0) {
+        const firstEmployee = simplicateEmployees[0]
+        console.log('[Sync] First employee sample:', JSON.stringify(firstEmployee, null, 2))
+        console.log('[Sync] Rate fields check:', {
+          hourly_sales_tariff: firstEmployee?.hourly_sales_tariff,
+          hourly_cost_tariff: firstEmployee?.hourly_cost_tariff,
+          type: firstEmployee?.type,
+        })
+      }
+
       const results = {
         created: 0,
         updated: 0,

@@ -10,12 +10,26 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Users, FolderKanban, Layers, DollarSign } from 'lucide-react'
+import { Loader2, Users, FolderKanban, Layers, DollarSign, RefreshCw, AlertCircle } from 'lucide-react'
 import { api } from '@/trpc/react'
+import { useState } from 'react'
 
 export default function RatesPage() {
-  const { data, isLoading } = api.rates.getRateOverview.useQuery()
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const { data, isLoading, refetch } = api.rates.getRateOverview.useQuery()
+
+  const syncEmployees = api.sync.syncEmployees.useMutation({
+    onSuccess: (result) => {
+      setSyncMessage(`Synced ${result.updated + result.created} employees. Rates should now be visible.`)
+      refetch()
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+    onError: (error) => {
+      setSyncMessage(`Sync failed: ${error.message}`)
+    },
+  })
 
   if (isLoading) {
     return (
@@ -27,15 +41,53 @@ export default function RatesPage() {
 
   const { userRates = [], projectRates = [], serviceRates = [], stats } = data ?? {}
 
+  const hasNoRates = (stats?.usersWithRates ?? 0) === 0
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Rates</h1>
-        <p className="text-muted-foreground">
-          Manage rates at user, project, and service levels
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Rates</h1>
+          <p className="text-muted-foreground">
+            Manage rates at user, project, and service levels
+          </p>
+        </div>
+        <Button
+          onClick={() => syncEmployees.mutate()}
+          disabled={syncEmployees.isPending}
+          variant="outline"
+        >
+          {syncEmployees.isPending ? (
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Sync Employee Rates
+        </Button>
       </div>
+
+      {/* Sync Message */}
+      {syncMessage && (
+        <div className="rounded-lg border bg-muted p-4 flex items-center gap-3">
+          <AlertCircle className="h-4 w-4" />
+          <p>{syncMessage}</p>
+        </div>
+      )}
+
+      {/* No Rates Warning */}
+      {hasNoRates && !syncMessage && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+          <div className="flex items-center gap-2 font-medium text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            No rates found
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Click &quot;Sync Employee Rates&quot; to fetch rates from Simplicate.
+            Rates are pulled from the employee&apos;s hourly_sales_tariff and hourly_cost_tariff fields.
+          </p>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
