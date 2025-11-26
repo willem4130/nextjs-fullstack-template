@@ -93,12 +93,14 @@ export default function RatesPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">User Rates</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.usersWithRates ?? 0}</div>
-            <p className="text-xs text-muted-foreground">Users with default rates</p>
+            <div className="text-2xl font-bold">{stats?.totalUsers ?? 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.usersWithRates ?? 0} with rates, {stats?.usersWithoutRates ?? 0} need rates
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -149,13 +151,13 @@ export default function RatesPage() {
             <CardHeader>
               <CardTitle>User Default Rates</CardTitle>
               <CardDescription>
-                Base rates synced from Simplicate. These apply when no project/service override exists.
+                Base rates for all employees. Internal employees sync from Simplicate. External/freelancers need manual rate entry.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {userRates.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No users with rates found. Run &quot;Sync Employees&quot; from Settings.
+                  No users found. Run &quot;Sync Employees&quot; from Settings.
                 </div>
               ) : (
                 <Table>
@@ -165,60 +167,76 @@ export default function RatesPage() {
                       <TableHead>Type</TableHead>
                       <TableHead className="text-right">Sales Rate</TableHead>
                       <TableHead className="text-right">Cost Rate</TableHead>
-                      <TableHead>Last Synced</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {userRates.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{user.name ?? 'Unnamed'}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {user.simplicateEmployeeType ? (
-                            <Badge variant="secondary">{user.simplicateEmployeeType}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {user.salesRateOverride ?? user.defaultSalesRate ? (
-                            <div className="flex flex-col items-end">
-                              <span className="font-medium">
-                                {'\u20AC'}{(user.salesRateOverride ?? user.defaultSalesRate)?.toFixed(2)}
-                              </span>
-                              {user.salesRateOverride && (
-                                <Badge variant="outline" className="text-xs">override</Badge>
-                              )}
+                    {userRates.map((user) => {
+                      const hasAnyRate = user.salesRateOverride !== null ||
+                        user.defaultSalesRate !== null ||
+                        user.costRateOverride !== null ||
+                        user.defaultCostRate !== null
+                      const isExternal = user.simplicateEmployeeType === 'external'
+
+                      return (
+                        <TableRow key={user.id} className={!hasAnyRate ? 'bg-amber-50 dark:bg-amber-950/20' : ''}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{user.name ?? 'Unnamed'}</p>
+                              <p className="text-sm text-muted-foreground">{user.email}</p>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {user.costRateOverride ?? user.defaultCostRate ? (
-                            <div className="flex flex-col items-end">
-                              <span className="font-medium">
-                                {'\u20AC'}{(user.costRateOverride ?? user.defaultCostRate)?.toFixed(2)}
-                              </span>
-                              {user.costRateOverride && (
-                                <Badge variant="outline" className="text-xs">override</Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {user.ratesSyncedAt
-                            ? new Date(user.ratesSyncedAt).toLocaleDateString()
-                            : '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            {user.simplicateEmployeeType ? (
+                              <Badge variant={isExternal ? 'outline' : 'secondary'}>
+                                {isExternal ? 'freelancer' : user.simplicateEmployeeType}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {user.salesRateOverride ?? user.defaultSalesRate ? (
+                              <div className="flex flex-col items-end">
+                                <span className="font-medium">
+                                  {'\u20AC'}{(user.salesRateOverride ?? user.defaultSalesRate)?.toFixed(2)}
+                                </span>
+                                {user.salesRateOverride && (
+                                  <Badge variant="outline" className="text-xs">override</Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400">needs rate</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {user.costRateOverride ?? user.defaultCostRate ? (
+                              <div className="flex flex-col items-end">
+                                <span className="font-medium">
+                                  {'\u20AC'}{(user.costRateOverride ?? user.defaultCostRate)?.toFixed(2)}
+                                </span>
+                                {user.costRateOverride && (
+                                  <Badge variant="outline" className="text-xs">override</Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400">needs rate</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {hasAnyRate ? (
+                              <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                configured
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">
+                                missing
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               )}

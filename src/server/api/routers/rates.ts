@@ -9,16 +9,8 @@ import {
 export const ratesRouter = createTRPCRouter({
   // Get rate overview showing hierarchy: User > Project > Service-Employee
   getRateOverview: publicProcedure.query(async ({ ctx }) => {
-    // Get all users with their rates
+    // Get ALL users (not just those with rates) so we can set rates for freelancers
     const users = await ctx.db.user.findMany({
-      where: {
-        OR: [
-          { defaultSalesRate: { not: null } },
-          { defaultCostRate: { not: null } },
-          { salesRateOverride: { not: null } },
-          { costRateOverride: { not: null } },
-        ],
-      },
       select: {
         id: true,
         name: true,
@@ -30,7 +22,10 @@ export const ratesRouter = createTRPCRouter({
         costRateOverride: true,
         ratesSyncedAt: true,
       },
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { simplicateEmployeeType: 'asc' }, // internal first, then external
+        { name: 'asc' },
+      ],
     })
 
     // Get project-level rate overrides
@@ -98,12 +93,23 @@ export const ratesRouter = createTRPCRouter({
       },
     })
 
+    // Count users with any rate set
+    const usersWithRates = users.filter(
+      (u) =>
+        u.defaultSalesRate !== null ||
+        u.defaultCostRate !== null ||
+        u.salesRateOverride !== null ||
+        u.costRateOverride !== null
+    ).length
+
     return {
       userRates: users,
       projectRates,
       serviceRates,
       stats: {
-        usersWithRates: users.length,
+        totalUsers: users.length,
+        usersWithRates,
+        usersWithoutRates: users.length - usersWithRates,
         projectOverrides: projectRates.length,
         serviceOverrides: serviceRates.length,
       },
