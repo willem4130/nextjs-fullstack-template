@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [isSyncingProjects, setIsSyncingProjects] = useState(false)
   const [isSyncingEmployees, setIsSyncingEmployees] = useState(false)
   const [isSyncingServices, setIsSyncingServices] = useState(false)
+  const [isSyncingProjectMembers, setIsSyncingProjectMembers] = useState(false)
   const [isSyncingHours, setIsSyncingHours] = useState(false)
   const [isSyncingInvoices, setIsSyncingInvoices] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
@@ -149,6 +150,22 @@ export default function SettingsPage() {
     },
   })
 
+  const syncProjectMembers = api.sync.syncProjectMembers.useMutation({
+    onSuccess: (data) => {
+      setIsSyncingProjectMembers(false)
+      const skippedInfo = data.skipped > 0 ? ` (${data.skipped} skipped)` : ''
+      setSyncMessage(
+        `✅ Project Members sync complete! Created: ${data.created}, Updated: ${data.updated}, Projects: ${data.projectsProcessed}${skippedInfo}`
+      )
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+    onError: (error) => {
+      setIsSyncingProjectMembers(false)
+      setSyncMessage(`❌ Project Members sync failed: ${error.message}`)
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+  })
+
   const handleSyncProjects = () => {
     setIsSyncingProjects(true)
     setSyncMessage(null)
@@ -179,7 +196,13 @@ export default function SettingsPage() {
     syncInvoices.mutate()
   }
 
-  const isSyncing = isSyncingProjects || isSyncingEmployees || isSyncingServices || isSyncingHours || isSyncingInvoices || isResetting
+  const handleSyncProjectMembers = () => {
+    setIsSyncingProjectMembers(true)
+    setSyncMessage(null)
+    syncProjectMembers.mutate()
+  }
+
+  const isSyncing = isSyncingProjects || isSyncingEmployees || isSyncingServices || isSyncingProjectMembers || isSyncingHours || isSyncingInvoices || isResetting
 
   // Reset and sync mutation
   const resetAndSync = api.sync.resetAndSync.useMutation({
@@ -391,6 +414,32 @@ export default function SettingsPage() {
                   <>
                     <Briefcase className="mr-2 h-4 w-4" />
                     Sync Services
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Project Members Sync */}
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Project Members
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Team member assignments to projects (required for email sending)
+                </p>
+              </div>
+              <Button onClick={handleSyncProjectMembers} disabled={isSyncing} size="sm">
+                {isSyncingProjectMembers ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Users className="mr-2 h-4 w-4" />
+                    Sync Members
                   </>
                 )}
               </Button>

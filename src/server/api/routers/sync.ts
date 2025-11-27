@@ -387,6 +387,110 @@ export const syncRouter = createTRPCRouter({
     }
   }),
 
+  // Sync project members from Simplicate to local database
+  syncProjectMembers: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      // Get all projects with their Simplicate IDs
+      const projects = await ctx.db.project.findMany({
+        where: { simplicateId: { not: undefined } },
+        select: { id: true, simplicateId: true, name: true },
+      })
+
+      // Get all users with their Simplicate employee IDs
+      const users = await ctx.db.user.findMany({
+        where: { simplicateEmployeeId: { not: undefined } },
+        select: { id: true, simplicateEmployeeId: true },
+      })
+      const userMap = new Map(users.map((u) => [u.simplicateEmployeeId!, u.id]))
+
+      const results = {
+        created: 0,
+        updated: 0,
+        projectsProcessed: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+
+      // For each project, fetch employees from Simplicate
+      for (const project of projects) {
+        if (!project.simplicateId) continue
+
+        try {
+          const employees = await client.getProjectEmployees(project.simplicateId)
+          results.projectsProcessed++
+
+          for (const employee of employees) {
+            // The employee.id is the Simplicate employee ID
+            const userId = userMap.get(employee.id)
+
+            if (!userId) {
+              results.skipped++
+              continue
+            }
+
+            // Get role from the employee name (function/role name in project context)
+            const role = employee.name || 'Team Member'
+
+            // Get rates if available from the employee record
+            const salesRate = employee.hourly_sales_tariff
+              ? parseFloat(String(employee.hourly_sales_tariff))
+              : null
+            const costRate = employee.hourly_cost_tariff
+              ? parseFloat(String(employee.hourly_cost_tariff))
+              : null
+
+            const memberData = {
+              projectId: project.id,
+              userId,
+              role,
+              salesRate: salesRate && salesRate > 0 ? salesRate : null,
+              costRate: costRate && costRate > 0 ? costRate : null,
+              salesRateSource: salesRate && salesRate > 0 ? 'simplicate-project' : null,
+              costRateSource: costRate && costRate > 0 ? 'simplicate-project' : null,
+            }
+
+            // Upsert project member
+            const existingMember = await ctx.db.projectMember.findUnique({
+              where: {
+                projectId_userId: {
+                  projectId: project.id,
+                  userId,
+                },
+              },
+            })
+
+            if (existingMember) {
+              await ctx.db.projectMember.update({
+                where: { id: existingMember.id },
+                data: memberData,
+              })
+              results.updated++
+            } else {
+              await ctx.db.projectMember.create({
+                data: memberData,
+              })
+              results.created++
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to sync members for project ${project.name}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        totalProjects: projects.length,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to sync project members from Simplicate: ${errorMessage}`)
+    }
+  }),
+
   // Sync hours from Simplicate to local database
   syncHours: publicProcedure.mutation(async ({ ctx }) => {
     const client = getSimplicateClient()
