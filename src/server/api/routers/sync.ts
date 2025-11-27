@@ -74,16 +74,28 @@ export const syncRouter = createTRPCRouter({
       // Fetch all employees from Simplicate
       const simplicateEmployees = await client.getEmployees({ limit: 100 })
 
-      // Log first employee to see what fields are available
-      if (simplicateEmployees.length > 0) {
-        const firstEmployee = simplicateEmployees[0]
-        console.log('[Sync] First employee sample:', JSON.stringify(firstEmployee, null, 2))
-        console.log('[Sync] Rate fields check:', {
-          hourly_sales_tariff: firstEmployee?.hourly_sales_tariff,
-          hourly_cost_tariff: firstEmployee?.hourly_cost_tariff,
-          type: firstEmployee?.type,
-        })
+      // Fetch timetables to get the actual cost rates (rates are stored there, not on employee records)
+      const timetables = await client.getTimetables({ limit: 100 })
+
+      // Build a map of employee ID -> cost rate from timetables
+      // Use the most recent active timetable for each employee
+      const employeeRatesMap = new Map<string, { salesRate: number | null; costRate: number | null }>()
+      for (const tt of timetables) {
+        if (tt.employee?.id) {
+          const salesRate = tt.hourly_sales_tariff ? parseFloat(tt.hourly_sales_tariff) : null
+          const costRate = tt.hourly_cost_tariff ? parseFloat(tt.hourly_cost_tariff) : null
+          // Only store if we have a valid cost rate (or update if better)
+          const existing = employeeRatesMap.get(tt.employee.id)
+          if (!existing || (costRate && costRate > 0)) {
+            employeeRatesMap.set(tt.employee.id, {
+              salesRate: salesRate && salesRate > 0 ? salesRate : null,
+              costRate: costRate && costRate > 0 ? costRate : null
+            })
+          }
+        }
       }
+
+      console.log('[Sync] Timetable rates loaded:', employeeRatesMap.size, 'employees with rates')
 
       const results = {
         created: 0,
@@ -104,16 +116,19 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
-          // Parse rate strings to numbers (Simplicate returns them as strings like "135.00")
-          const salesRate = employee.hourly_sales_tariff ? parseFloat(String(employee.hourly_sales_tariff)) : null
-          const costRate = employee.hourly_cost_tariff ? parseFloat(String(employee.hourly_cost_tariff)) : null
+          // Get rates from timetable map (preferred) or fall back to employee record
+          const timetableRates = employeeRatesMap.get(employee.id)
+          const salesRate = timetableRates?.salesRate ??
+            (employee.hourly_sales_tariff ? parseFloat(String(employee.hourly_sales_tariff)) : null)
+          const costRate = timetableRates?.costRate ??
+            (employee.hourly_cost_tariff ? parseFloat(String(employee.hourly_cost_tariff)) : null)
 
           const userData = {
             email: employeeEmail,
             name: employeeName,
             simplicateEmployeeId: employee.id,
             role: 'TEAM_MEMBER' as const,
-            // Financial rate fields from Simplicate (parsed from string)
+            // Financial rate fields - prefer timetable, fall back to employee record
             defaultSalesRate: salesRate && salesRate > 0 ? salesRate : null,
             defaultCostRate: costRate && costRate > 0 ? costRate : null,
             simplicateEmployeeType: employee.type?.label || null,
@@ -380,11 +395,24 @@ export const syncRouter = createTRPCRouter({
       // Fetch all hours with pagination (no date filter to get everything)
       const simplicateHours = await client.getAllHours()
 
+      // Pre-fetch all users with their cost rates for efficient lookup
+      const allUsers = await ctx.db.user.findMany({
+        where: { simplicateEmployeeId: { not: null } },
+        select: {
+          id: true,
+          simplicateEmployeeId: true,
+          defaultCostRate: true,
+          costRateOverride: true,
+        },
+      })
+      const userMap = new Map(allUsers.map(u => [u.simplicateEmployeeId!, u]))
+
       const results = {
         created: 0,
         updated: 0,
         skipped: 0,
         errors: [] as string[],
+        financialsCalculated: 0,
       }
 
       for (const hours of simplicateHours) {
@@ -402,9 +430,7 @@ export const syncRouter = createTRPCRouter({
 
           // Find the user by Simplicate employee ID
           const employeeId = hours.employee?.id || hours.employee_id
-          const user = await ctx.db.user.findFirst({
-            where: { simplicateEmployeeId: employeeId },
-          })
+          const user = userMap.get(employeeId)
 
           if (!user) {
             results.skipped++
@@ -435,6 +461,35 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
+          // Get rates - salesRate from Simplicate tariff, costRate from user
+          const salesRate = hours.tariff || hours.hourly_rate || null
+          const costRate = user.costRateOverride ?? user.defaultCostRate ?? null
+
+          // Calculate financial values
+          let revenue: number | null = null
+          let cost: number | null = null
+          let margin: number | null = null
+          let rateSource: string | null = null
+
+          if (salesRate !== null && hours.hours > 0) {
+            revenue = hours.hours * salesRate
+            rateSource = 'simplicate' // Sales rate comes from Simplicate hours entry
+          }
+
+          if (costRate !== null && hours.hours > 0) {
+            cost = hours.hours * costRate
+            if (user.costRateOverride) {
+              rateSource = 'user-override'
+            } else if (user.defaultCostRate) {
+              rateSource = rateSource ? rateSource : 'user-default'
+            }
+          }
+
+          if (revenue !== null && cost !== null) {
+            margin = revenue - cost
+            results.financialsCalculated++
+          }
+
           const hoursData = {
             projectId: project.id,
             userId: user.id,
@@ -443,7 +498,12 @@ export const syncRouter = createTRPCRouter({
             hours: hours.hours,
             date: parsedDate,
             description: hours.description || null,
-            salesRate: hours.tariff || hours.hourly_rate || null,
+            salesRate,
+            costRate,
+            revenue,
+            cost,
+            margin,
+            rateSource,
             billable: hours.billable ?? true,
             status: mapHoursStatus(hours.status),
           }

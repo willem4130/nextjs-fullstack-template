@@ -550,6 +550,29 @@ export class SimplicateClient {
   }
 
   // ==========================================
+  // Timetables (for employee rates)
+  // ==========================================
+
+  async getTimetables(params?: {
+    offset?: number;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    employee?: { id: string; name: string };
+    hourly_sales_tariff?: string;
+    hourly_cost_tariff?: string;
+    start_date?: string;
+    end_date?: string;
+  }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.offset) queryParams.set('offset', params.offset.toString());
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+
+    const query = queryParams.toString();
+    return this.request(`/hrm/timetable${query ? `?${query}` : ''}`);
+  }
+
+  // ==========================================
   // Webhooks
   // ==========================================
 
