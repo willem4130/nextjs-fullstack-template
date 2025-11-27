@@ -101,6 +101,8 @@ model User {
   expenses              Expense[]
   purchasingInvoices    PurchasingInvoice[]
   serviceEmployeeRates  ServiceEmployeeRate[]
+  sentEmails            SentEmail[]
+  documentRequests      DocumentRequest[]
 
   @@index([email])
   @@index([simplicateEmployeeId])
@@ -185,6 +187,8 @@ model Project {
   expenses            Expense[]
   purchasingInvoices  PurchasingInvoice[]
   services            ProjectService[]
+  sentEmails          SentEmail[]
+  documentRequests    DocumentRequest[]
 
   @@index([simplicateId])
   @@index([status])
@@ -819,4 +823,113 @@ model FilterPreset {
 
   @@index([userId, page])
   @@index([page])
+}
+
+// ==========================================
+// EMAIL AUTOMATION
+// ==========================================
+
+enum EmailTemplateType {
+  CONTRACT_REMINDER
+  HOURS_REMINDER
+  CUSTOM
+}
+
+enum SentEmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DocumentRequestStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+model EmailTemplate {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  type        EmailTemplateType
+  description String?
+
+  // Content (Dutch by default, supports {{variables}})
+  subject     String
+  bodyHtml    String            // HTML with {{variables}}
+
+  // Available variables for this template (JSON array)
+  variables   String?           // e.g., '["memberName", "projectName", "uploadUrl"]'
+
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  sentEmails  SentEmail[]
+}
+
+model SentEmail {
+  id          String          @id @default(cuid())
+  templateId  String?
+  projectId   String?
+  userId      String
+
+  toEmail     String
+  subject     String
+
+  status      SentEmailStatus @default(PENDING)
+  sentAt      DateTime?
+  error       String?
+
+  // Resend tracking (for future webhook integration)
+  resendId    String?         @unique
+
+  createdAt   DateTime        @default(now())
+
+  template    EmailTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+}
+
+model DocumentRequest {
+  id             String                @id @default(cuid())
+  projectId      String
+  userId         String
+
+  // Request details
+  type           String                // "contract", "document", etc.
+  description    String?
+
+  // Secure upload token
+  uploadToken    String                @unique
+  tokenExpiresAt DateTime?
+
+  // Status tracking
+  status         DocumentRequestStatus @default(PENDING)
+  requestedAt    DateTime              @default(now())
+  uploadedAt     DateTime?
+  verifiedAt     DateTime?
+
+  // Document storage (Vercel Blob)
+  documentUrl    String?
+  documentName   String?
+  documentSize   Int?
+
+  // Link to sent email
+  sentEmailId    String?
+
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([uploadToken])
+  @@index([status])
 }
