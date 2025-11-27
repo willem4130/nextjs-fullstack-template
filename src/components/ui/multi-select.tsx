@@ -62,10 +62,16 @@ export function MultiSelect({
     }
   }
 
-  const clearAll = (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const selectAll = () => {
+    onChange(options.map((opt) => opt.value))
+  }
+
+  const clearAll = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
     onChange([])
   }
+
+  const allSelected = options.length > 0 && selected.length === options.length
 
   // Group options if they have groups
   const groupedOptions = React.useMemo(() => {
@@ -127,6 +133,28 @@ export function MultiSelect({
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
+
+            {/* Select All / Clear All */}
+            {options.length > 1 && (
+              <CommandGroup>
+                <CommandItem
+                  onSelect={() => allSelected ? clearAll() : selectAll()}
+                  className="text-primary font-medium"
+                >
+                  <div
+                    className={cn(
+                      'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
+                      allSelected
+                        ? 'bg-primary text-primary-foreground'
+                        : 'opacity-50 [&_svg]:invisible'
+                    )}
+                  >
+                    <Check className="h-3 w-3" />
+                  </div>
+                  {allSelected ? 'Clear all' : 'Select all'}
+                </CommandItem>
+              </CommandGroup>
+            )}
 
             {/* Ungrouped options */}
             {groupedOptions.ungrouped.length > 0 && (

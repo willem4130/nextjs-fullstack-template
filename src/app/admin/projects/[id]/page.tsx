@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,24 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { api } from '@/trpc/react'
 import Link from 'next/link'
 import {
@@ -36,6 +54,7 @@ import {
   ExternalLink,
   Activity,
   Workflow,
+  Mail,
 } from 'lucide-react'
 
 type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED'
@@ -87,6 +106,76 @@ const automationStatusConfig: Record<AutomationStatus, { icon: React.ElementType
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { data: project, isLoading, error } = api.projects.getById.useQuery({ id })
+
+  // Send email dialog state
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const [createUploadRequests, setCreateUploadRequests] = useState(true)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailResult, setEmailResult] = useState<{
+    success: boolean
+    message: string
+  } | null>(null)
+
+  // Email templates and members queries
+  const { data: templates } = api.emailTemplates.getActive.useQuery()
+  const { data: members } = api.projectEmails.getProjectMembers.useQuery(
+    { projectId: id },
+    { enabled: emailDialogOpen }
+  )
+
+  // Send email mutation
+  const sendEmailMutation = api.projectEmails.sendToMembers.useMutation({
+    onSuccess: (result) => {
+      setSendingEmail(false)
+      setEmailResult({
+        success: true,
+        message: `Email verstuurd naar ${result.success} ontvanger(s)${result.failed > 0 ? `, ${result.failed} mislukt` : ''}`,
+      })
+      // Reset after 3 seconds
+      setTimeout(() => {
+        setEmailDialogOpen(false)
+        setEmailResult(null)
+        setSelectedTemplateId('')
+        setSelectedMemberIds([])
+      }, 3000)
+    },
+    onError: (error) => {
+      setSendingEmail(false)
+      setEmailResult({
+        success: false,
+        message: error.message || 'Er is een fout opgetreden',
+      })
+    },
+  })
+
+  const handleSendEmail = () => {
+    if (!selectedTemplateId || selectedMemberIds.length === 0) return
+    setSendingEmail(true)
+    setEmailResult(null)
+    sendEmailMutation.mutate({
+      projectId: id,
+      templateId: selectedTemplateId,
+      userIds: selectedMemberIds,
+      createDocumentRequests: createUploadRequests,
+    })
+  }
+
+  const toggleMember = (memberId: string) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
+    )
+  }
+
+  const toggleAllMembers = () => {
+    if (!members) return
+    if (selectedMemberIds.length === members.length) {
+      setSelectedMemberIds([])
+    } else {
+      setSelectedMemberIds(members.map((m) => m.id))
+    }
+  }
 
   if (isLoading) {
     return (
@@ -178,12 +267,186 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <Link href={`/admin/workflows?project=${project.id}`}>
-          <Button variant="outline" className="gap-2">
-            <Workflow className="h-4 w-4" />
-            Configure Workflows
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Mail className="h-4 w-4" />
+                Stuur Email
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Email Versturen</DialogTitle>
+                <DialogDescription>
+                  Verstuur een email naar geselecteerde teamleden van dit project.
+                </DialogDescription>
+              </DialogHeader>
+
+              {emailResult ? (
+                <div
+                  className={`p-4 rounded-lg ${emailResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {emailResult.success ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <XCircle className="h-5 w-5" />
+                    )}
+                    {emailResult.message}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 py-4">
+                  {/* Template selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="template">Email Template</Label>
+                    <Select
+                      value={selectedTemplateId}
+                      onValueChange={setSelectedTemplateId}
+                    >
+                      <SelectTrigger id="template">
+                        <SelectValue placeholder="Selecteer een template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates?.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {templates?.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Geen templates gevonden.{' '}
+                        <Link href="/admin/email-templates" className="underline">
+                          Maak eerst een template aan.
+                        </Link>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Member selection */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Ontvangers</Label>
+                      {members && members.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={toggleAllMembers}
+                        >
+                          {selectedMemberIds.length === members.length
+                            ? 'Deselecteer alles'
+                            : 'Selecteer alles'}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                      {!members ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Teamleden laden...
+                        </div>
+                      ) : members.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Geen teamleden gevonden voor dit project.
+                        </p>
+                      ) : (
+                        members.map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              id={`member-${member.id}`}
+                              checked={selectedMemberIds.includes(member.id)}
+                              onCheckedChange={() => toggleMember(member.id)}
+                            />
+                            <label
+                              htmlFor={`member-${member.id}`}
+                              className="text-sm cursor-pointer flex-1"
+                            >
+                              <span className="font-medium">
+                                {member.name || 'Onbekend'}
+                              </span>
+                              <span className="text-muted-foreground ml-2">
+                                {member.email}
+                              </span>
+                            </label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {selectedMemberIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedMemberIds.length} ontvanger(s) geselecteerd
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Upload request option */}
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Checkbox
+                      id="createUpload"
+                      checked={createUploadRequests}
+                      onCheckedChange={(checked) =>
+                        setCreateUploadRequests(checked === true)
+                      }
+                    />
+                    <label htmlFor="createUpload" className="text-sm cursor-pointer">
+                      Maak document upload links aan
+                      <span className="text-muted-foreground ml-1">
+                        (voor contract uploads)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter>
+                {!emailResult && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEmailDialogOpen(false)}
+                    >
+                      Annuleren
+                    </Button>
+                    <Button
+                      onClick={handleSendEmail}
+                      disabled={
+                        !selectedTemplateId ||
+                        selectedMemberIds.length === 0 ||
+                        sendingEmail
+                      }
+                    >
+                      {sendingEmail ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Versturen...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="mr-2 h-4 w-4" />
+                          Verstuur ({selectedMemberIds.length})
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Link href={`/admin/workflows?project=${project.id}`}>
+            <Button variant="outline" className="gap-2">
+              <Workflow className="h-4 w-4" />
+              Configure Workflows
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Quick Stats */}

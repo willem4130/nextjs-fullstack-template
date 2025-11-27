@@ -261,14 +261,13 @@ export const hoursRouter = createTRPCRouter({
       }).optional()
     )
     .query(async ({ ctx, input }) => {
-      const now = new Date()
-
       // Support both single and multi-select (backwards compatible)
-      const selectedMonths = input?.months?.length
-        ? input.months
+      // Empty array means "all time" (no date filter)
+      const selectedMonths = input?.months !== undefined
+        ? input.months // Use exactly what was passed (can be empty array)
         : input?.month
           ? [input.month]
-          : [`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`]
+          : [] // Default to all time when no input
 
       const selectedProjects = input?.projectIds?.length
         ? input.projectIds
@@ -282,21 +281,24 @@ export const hoursRouter = createTRPCRouter({
           ? [input.employeeId]
           : []
 
-      // Build date ranges for all selected months
-      const dateRanges: { gte: Date; lte: Date }[] = selectedMonths.map(m => {
-        const [year, month] = m.split('-').map(Number)
-        return {
-          gte: new Date(year!, month! - 1, 1),
-          lte: new Date(year!, month!, 0, 23, 59, 59),
-        }
-      })
-
       // Build where clause for hours
-      const hoursWhere: Prisma.HoursEntryWhereInput = {
-        OR: dateRanges.map(range => ({
+      const hoursWhere: Prisma.HoursEntryWhereInput = {}
+
+      // Only apply date filter if specific months are selected
+      if (selectedMonths.length > 0) {
+        const dateRanges = selectedMonths.map(m => {
+          const [year, month] = m.split('-').map(Number)
+          return {
+            gte: new Date(year!, month! - 1, 1),
+            lte: new Date(year!, month!, 0, 23, 59, 59),
+          }
+        })
+        hoursWhere.OR = dateRanges.map(range => ({
           date: range,
-        })),
+        }))
       }
+      // If selectedMonths is empty, no date filter = all time
+
       if (selectedProjects.length > 0) hoursWhere.projectId = { in: selectedProjects }
       if (selectedEmployees.length > 0) hoursWhere.userId = { in: selectedEmployees }
 

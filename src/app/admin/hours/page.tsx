@@ -193,12 +193,33 @@ export default function HoursPage() {
 
   // Get display label for months
   const getMonthsLabel = useCallback(() => {
-    if (filters.months.length === 0) return 'All months'
+    if (filters.months.length === 0) return 'All time'
     if (filters.months.length === 1) {
       return monthOptions.find(m => m.value === filters.months[0])?.label || filters.months[0]
     }
-    return `${filters.months.length} months`
+    return `${filters.months.length} months selected`
   }, [filters.months])
+
+  // Get a short description of active filters
+  const getFilterDescription = useCallback(() => {
+    const parts: string[] = []
+    if (filters.months.length === 0) {
+      parts.push('all time')
+    } else if (filters.months.length === 1) {
+      const monthValue = filters.months[0]
+      const label = monthValue ? monthOptions.find(m => m.value === monthValue)?.label : undefined
+      parts.push(label || monthValue || 'unknown')
+    } else {
+      parts.push(`${filters.months.length} months`)
+    }
+    if (filters.projects.length > 0) {
+      parts.push(`${filters.projects.length} project${filters.projects.length > 1 ? 's' : ''}`)
+    }
+    if (filters.employees.length > 0) {
+      parts.push(`${filters.employees.length} employee${filters.employees.length > 1 ? 's' : ''}`)
+    }
+    return parts.join(', ')
+  }, [filters])
 
   // Save preset
   const handleSavePreset = async () => {
@@ -626,12 +647,12 @@ export default function HoursPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Hours Selected</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Hours</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{projectsSummary?.totals.hoursThisMonth.toFixed(1) || '0'}</div>
-            <p className="text-xs text-muted-foreground">{getMonthsLabel()}</p>
+            <p className="text-xs text-muted-foreground">{getFilterDescription()}</p>
           </CardContent>
         </Card>
         <Card>

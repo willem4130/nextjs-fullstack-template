@@ -1,14 +1,14 @@
 # Session State - Simplicate Automation System
 
-**Last Updated**: November 26, 2025, 5:10 PM
+**Last Updated**: November 27, 2025, 2:30 PM
 **Session Type**: Complex
-**Project**: Simplicate Automation System - Financial Tracking Phase
+**Project**: Simplicate Automation System - Email Automation MVP
 
 ---
 
 ## 🎯 Current Objective
 
-Building a comprehensive Financial Tracking System to track revenue, costs, and margins at project-service-employee level. Phase 1 schema is complete, rate sync is implemented with parsing fix.
+Build an email automation system to send templated emails to project members with document upload capability. First use case: Contract reminder in Dutch - remind project members to upload signed contracts.
 
 ---
 
@@ -16,118 +16,121 @@ Building a comprehensive Financial Tracking System to track revenue, costs, and 
 
 ### ✅ Completed Tasks
 
-- **Phase 1: Schema Extensions - COMPLETE**
-  - Added `EmployeeType` enum (CO_OWNER, FREELANCER, INTERNAL)
-  - Added User financial fields: defaultSalesRate, defaultCostRate, overrides
-  - Added HoursEntry fields: salesRate, costRate, revenue, cost, margin, rateSource, purchaseInvoiceId
-  - Created ServiceEmployeeRate model
-  - Added ProjectService hourTypeTariffs field
-  - Ran db:push successfully
-
-- **Phase 1: Employee Rate Sync - COMPLETE**
-  - Updated SimplicateEmployee interface with rate fields
-  - Updated syncEmployees() to sync hourly_sales_tariff, hourly_cost_tariff, type
-  - **Fixed critical bug**: Simplicate returns rates as STRINGS ("135.00"), not numbers
-  - Added proper parsing with parseFloat()
-
-- **Rates Page & UI - COMPLETE**
-  - Created `/admin/rates` page with tabs (User/Project/Service rates)
-  - Added rates router with getRateOverview, getProjectRates
-  - Added sync button directly on Rates page
-  - Added rate columns (Sales Rate, Cost Rate, Type) to People page
-  - Reordered navigation: Projects → People → Hours → Rates → Contracts
+- **Email Automation Schema** - Added EmailTemplate, SentEmail, DocumentRequest models to Prisma
+- **Email Service** - Created variable substitution engine ({{memberName}}, {{projectName}}, etc.)
+- **Email Templates Router** - CRUD operations, preview, seed defaults
+- **Project Emails Router** - Send to members, track document requests, handle uploads
+- **Email Templates Page** - `/admin/email-templates` with full CRUD UI
+- **Upload Portal** - `/upload/[token]` public page for document uploads
+- **Vercel Blob Integration** - Document storage for uploaded files
+- **Dutch Default Template** - Contract reminder template pre-built
+- **Deployed to production** - All features live
 
 ### 🚧 In Progress
 
-- **Test employee sync**: Click "Sync Employee Rates" on Rates page to verify rates appear
+- **Phase 4: Send Email from Project Page** - Need to add dialog/button to project detail page
 
 ### 📋 Pending Tasks
 
-- Re-sync hours to populate salesRate from tariff
-- Phase 2: Create rate resolution system (src/lib/rates/resolver.ts)
-- Phase 3: Enhanced hours sync with revenue/cost/margin calculations
-- Phase 4: Financial dashboard (/admin/financials)
-- Phase 5-8: Hours enhancement, employee views, invoice matching, rate UI
+- Add "Send Email" dialog to project detail page (`/admin/projects/[id]`)
+- Add BLOB_READ_WRITE_TOKEN to Vercel environment variables
+- Test end-to-end email → upload flow
+- Add email tracking (opens/clicks) via Resend webhooks (future)
+- Add scheduled/cron emails for hours reminders (future)
 
 ---
 
 ## 🔑 Key Decisions Made
 
-**Rate Hierarchy**
-- **Choice**: ServiceEmployee → ProjectMember → User Override → User Default → Simplicate snapshot
-- **Rationale**: Most specific rate takes precedence
-- **Impact**: Flexible rate management at any level
+**Scope: MVP First**
+- **Choice**: Start with basic templates + manual send + upload portal
+- **Deferred**: Scheduled emails, open/click tracking, Simplicate sync
+- **Rationale**: Get core flow working first, add automation later
 
-**Simplicate Rate Parsing**
-- **Choice**: Parse rate strings to floats, filter out zero values
-- **Rationale**: Simplicate returns `hourly_cost_tariff: "135.00"` as string, not number
-- **Impact**: Proper storage and display of rates
+**Document Storage: Vercel Blob**
+- **Choice**: Use Vercel Blob for document storage
+- **Alternatives**: Simplicate documents, S3, local storage
+- **Rationale**: Simple, built into Vercel, good free tier
 
-**Navigation Order**
-- **Choice**: Projects → People → Hours → Rates → Contracts
-- **Rationale**: Logical flow for financial tracking workflow
-- **Impact**: Better UX for rate management
+**Upload UX: Both Options**
+- **Choice**: Email contains both custom portal link AND Simplicate link
+- **Rationale**: User requested flexibility - members can choose
+
+**Templates: Database + UI**
+- **Choice**: Store templates in DB with admin UI for editing
+- **Alternative**: Hardcoded templates in code
+- **Rationale**: User wants to edit templates without code changes
+
+**Page Location: Dedicated Page**
+- **Choice**: Created `/admin/email-templates` instead of adding to Settings
+- **Rationale**: Settings page was already very long, cleaner separation
 
 ---
 
 ## 📁 Files Modified
 
 ### Created
-- `src/app/admin/rates/page.tsx` - Rates page with tabs for User/Project/Service
-- `src/server/api/routers/rates.ts` - Rates router with getRateOverview, getProjectRates
+- `src/lib/email/variables.ts` - Variable substitution engine
+- `src/lib/email/service.ts` - Email sending with template support
+- `src/server/api/routers/emailTemplates.ts` - CRUD for templates
+- `src/server/api/routers/projectEmails.ts` - Send emails, manage uploads
+- `src/app/admin/email-templates/page.tsx` - Template management UI
+- `src/app/upload/[token]/page.tsx` - Public document upload portal
+- `src/components/ui/textarea.tsx` - Textarea component for template editor
 
 ### Modified
-- `prisma/schema.prisma` - Complete Phase 1 schema (HoursEntry, ServiceEmployeeRate, etc.)
-- `src/server/api/routers/sync.ts` - Rate sync with string→float parsing
-- `src/lib/simplicate/client.ts` - SimplicateEmployee interface with rate fields
-- `src/app/admin/users/page.tsx` - Added rate columns
-- `src/app/admin/layout.tsx` - Reordered navigation, added Rates link
-- `src/server/api/root.ts` - Registered rates router
-- `docs/project/FINANCIAL-TRACKING-TASKS.md` - Updated Phase 1 tasks as complete
+- `prisma/schema.prisma` - Added EmailTemplate, SentEmail, DocumentRequest models + enums
+- `src/server/api/root.ts` - Registered emailTemplates and projectEmails routers
+- `package.json` - Added @vercel/blob dependency
 
 ---
 
-## 🏗️ Schema Changes (Complete)
+## 🏗️ Patterns & Architecture
 
-**New Model**:
-```prisma
-model ServiceEmployeeRate {
-  id                  String         @id @default(cuid())
-  projectServiceId    String
-  userId              String
-  salesRate           Float?
-  costRate            Float?
-  salesRateSource     String?
-  costRateSource      String?
-  @@unique([projectServiceId, userId])
-}
-```
+**Variable Substitution**:
+- Pattern: `{{variableName}}` in templates
+- Supported: memberName, memberFirstName, memberEmail, projectName, projectNumber, clientName, uploadUrl, simplicateUrl, appUrl, currentDate, currentYear
 
-**HoursEntry Additions**:
-- `salesRate`, `costRate`, `revenue`, `cost`, `margin`
-- `rateSource` (where rate came from)
-- `purchaseInvoiceId` (link to PurchasingInvoice)
+**Upload Flow**:
+1. Admin sends email with template → creates DocumentRequest with uploadToken
+2. Email contains `/upload/[token]` link
+3. Team member uploads file → stored in Vercel Blob
+4. DocumentRequest updated with status=UPLOADED
 
-**ProjectService Additions**:
-- `hourTypeTariffs` JSON
-- `employeeRates` relation
+**Email Template HTML**:
+- Base wrapper with consistent styling
+- Supports custom HTML in bodyHtml field
+- Auto-wraps in professional email layout
+
+**Dependencies Added**:
+- `@vercel/blob` - Document storage
 
 ---
 
 ## 💡 Context & Notes
 
-**Critical Discovery**:
-- Simplicate API returns `hourly_sales_tariff` and `hourly_cost_tariff` as **strings** ("135.00")
-- Must use `parseFloat(String(value))` to convert
-- Willem: cost rate 135, sales rate 0
-- Bram: cost rate 100
-
 **Production URL**: https://simplicate-automations.vercel.app/
 
-**To Test Sync**:
-1. Go to /admin/rates
-2. Click "Sync Employee Rates"
-3. Check if rates appear (Willem should show €135 cost rate)
+**New Pages**:
+- `/admin/email-templates` - Template management
+- `/upload/[token]` - Public upload portal (no auth required)
+
+**Environment Variables Needed**:
+```
+BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxx  # For document uploads
+RESEND_API_KEY=re_xxxxx                   # Already configured
+```
+
+**Default Template (Dutch)**:
+- Name: "Contract Herinnering (Standaard)"
+- Type: CONTRACT_REMINDER
+- Subject: "Contract vereist voor {{projectName}}"
+
+**To Test**:
+1. Go to `/admin/email-templates`
+2. Click "Standaard Templates" to seed default
+3. Create document request manually or implement project page Send Email dialog
+4. Visit upload URL with token
 
 ---
 
@@ -137,35 +140,37 @@ model ServiceEmployeeRate {
 
 ---
 
-I'm continuing work on the Financial Tracking System for Simplicate Automations.
+I'm continuing work on the Email Automation System for Simplicate Automations.
 
 **Read these files first**:
-- `docs/project/FINANCIAL-TRACKING-PLAN.md` (full plan)
-- `docs/project/FINANCIAL-TRACKING-TASKS.md` (progress)
+- `SESSION.md` (detailed session context)
 - `CLAUDE.md` (project overview)
 
-**Current Goal**: Test rate sync, then start Phase 2 rate resolution.
+**Current Status**: Email automation MVP deployed, need to add Send Email button to project page
 
-**Just Completed**:
-- ✅ Phase 1: Schema complete (HoursEntry financial fields, ServiceEmployeeRate)
-- ✅ Phase 1: Employee rate sync with parsing fix
-- ✅ Rates page (/admin/rates) with sync button
-- ✅ Rate columns on People page
-- ✅ Navigation reorder: Projects → People → Hours → Rates → Contracts
-
-**Important Fix Applied**:
-- Simplicate returns rates as STRINGS ("135.00"), not numbers
-- Added parseFloat() parsing in syncEmployees()
+**Just Completed (This Session)**:
+- ✅ Database schema: EmailTemplate, SentEmail, DocumentRequest models
+- ✅ Email service with variable substitution ({{memberName}}, etc.)
+- ✅ `/admin/email-templates` page with full CRUD + preview
+- ✅ `/upload/[token]` public upload portal with drag & drop
+- ✅ Vercel Blob integration for document storage
+- ✅ Dutch contract reminder default template
+- ✅ All deployed to production
 
 **Next Steps**:
-1. Test rate sync on production (click "Sync Employee Rates" on Rates page)
-2. Re-sync hours to populate salesRate
-3. Start Phase 2: Rate resolution system (src/lib/rates/resolver.ts)
+1. Add "Send Email" dialog to `/admin/projects/[id]` page (select template, select members, send)
+2. Add BLOB_READ_WRITE_TOKEN to Vercel environment variables
+3. Test end-to-end: send email → member receives → uploads document
 
 **Key Files**:
-- `src/server/api/routers/rates.ts` - Rates queries
-- `src/app/admin/rates/page.tsx` - Rates UI
-- `src/server/api/routers/sync.ts` - Sync with rate parsing
+- `src/server/api/routers/projectEmails.ts` - sendToMembers mutation (already built)
+- `src/app/admin/projects/[id]/page.tsx` - Need to add Send Email button/dialog
+- `src/app/admin/email-templates/page.tsx` - Template management (done)
+- `src/app/upload/[token]/page.tsx` - Upload portal (done)
+
+**URLs**:
+- Email Templates: https://simplicate-automations.vercel.app/admin/email-templates
+- Upload Portal: https://simplicate-automations.vercel.app/upload/[token]
 
 ---
 
@@ -173,25 +178,34 @@ I'm continuing work on the Financial Tracking System for Simplicate Automations.
 
 ## 📚 Previous Session Notes
 
-**Session: November 26, 2025, 5:10 PM - Rate Sync & Rates Page**
-- Completed Phase 1 schema (HoursEntry, ServiceEmployeeRate)
-- Fixed rate parsing (strings to floats)
-- Created Rates page with sync button
-- Added rate columns to People page
-- Discovered Simplicate returns rates as strings
+**Session: November 27, 2025, 2:30 PM - Email Automation MVP**
+- Built complete email automation system
+- Templates in DB with admin UI
+- Upload portal with Vercel Blob
+- Dutch contract reminder template
+- Still need: Send Email button on project page
 
-**Session: November 26, 2025, 5:30 PM - Financial Tracking Start**
-- Created comprehensive Financial Tracking plan (8 phases)
-- Fixed hours sync date bug (Invalid Date handling)
-- Started schema extensions for financial tracking
+**Session: November 27, 2025, 11:30 AM - Hours Page UX**
+- Fixed "All months" showing current month only
+- Added Select All to MultiSelect
+- Changed "Hours Selected" to "Total Hours"
+- Verified all syncs working
 
-**Session: November 26, 2025, 4:50 PM - Multi-Select & Presets**
-- Added multi-select filters to Hours page
-- Created filter presets system with database storage
+**Session: November 27, 2025, 10:45 AM - Phase 3 Complete**
+- Discovered cost rates in /hrm/timetable endpoint
+- Added getTimetables() to Simplicate client
+- Updated syncEmployees() to fetch from timetables
+- Updated syncHours() with financial calculations
+- Added all sync buttons to Settings page
+- Tested: 425/426 entries with financials
+
+**Session: November 26, 2025 - Financial Tracking**
+- Created Financial Tracking plan (8 phases)
+- Phase 1 & 2: Schema + rate resolution system
 
 ---
 
-**Session Complexity**: Complex (Financial Tracking Phase 1 Complete)
+**Session Complexity**: Complex (11 files created/modified, new feature)
 **Build Status**: ✅ Typecheck passes
 **Deployment Status**: ✅ Latest deployed to Vercel
 
