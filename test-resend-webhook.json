@@ -1,0 +1,12 @@
+{
+  "type": "email.received",
+  "created_at": "2025-01-28T12:00:00Z",
+  "data": {
+    "from": "supplier@example.com",
+    "to": ["invoices@yourdomain.com"],
+    "subject": "Invoice #12345 - Project ABC",
+    "text": "Please find attached invoice #12345 for services rendered on Project ABC.",
+    "html": "<p>Please find attached invoice #12345 for services rendered on Project ABC.</p>",
+    "attachments": []
+  }
+}

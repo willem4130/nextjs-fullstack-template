@@ -37,39 +37,26 @@ Incoming Email (invoices@domain.com / contracts@domain.com)
 - **Total: ~$0.01 per invoice email**
 - **100 invoices/month = $1/month**
 
-## Email Provider Options
+## Email Provider: Resend Inbound Email ✅
 
-### Option 1: SendGrid Inbound Parse (Recommended)
-**Pros:**
-- Free tier: 100 emails/day
-- Simple webhook integration
-- Automatic email parsing
-- Reliable delivery
+**Current Implementation:** Using Resend for both inbound and outbound emails
 
-**Cons:**
-- Requires DNS MX record configuration
+**Why Resend:**
+- Already using Resend for outbound emails (hours reports, notifications)
+- Single provider = simpler setup
+- Modern API with JSON webhooks (easier to work with than multipart form data)
+- No additional accounts needed
+- Launched November 2025 - production ready
 
-### Option 2: Resend Inbound Email
-**Pros:**
-- Modern API
-- Already using Resend for outbound
-- Simple setup
+**Setup:**
+1. Configure webhook in Resend dashboard
+2. Set event type to `email.received`
+3. Point to: `https://simplicate-automations.vercel.app/api/email/inbound`
+4. Configure inbound address (e.g., `invoices@yourdomain.com`)
 
-**Cons:**
-- Currently in beta
-- Limited documentation
-
-### Option 3: Cloudflare Email Workers
-**Pros:**
-- Most flexible
-- Can handle any domain
-- Free tier available
-
-**Cons:**
-- More complex setup
-- Requires Cloudflare DNS
-
-**Decision: Start with SendGrid Inbound Parse**
+**Alternative Options** (not implemented):
+- SendGrid Inbound Parse - requires separate account and MX records
+- Cloudflare Email Workers - more complex setup
 
 ## Database Schema
 
@@ -243,3 +230,56 @@ SENDGRID_WEBHOOK_SECRET=...
 - [ ] Receipt OCR (employee expenses)
 - [ ] Multi-language support (Dutch invoices)
 - [ ] Integration with accounting software
+
+---
+
+## Setup Guide (Resend)
+
+### 1. Configure Resend Inbound Email
+
+1. **Log in to Resend Dashboard**: https://resend.com/
+2. **Navigate to Webhooks**: Settings → Webhooks
+3. **Create New Webhook**:
+   - **Endpoint URL**: `https://simplicate-automations.vercel.app/api/email/inbound`
+   - **Events**: Select `email.received`
+   - **Status**: Enable webhook
+4. **Save the webhook**
+
+### 2. Configure Inbound Email Address
+
+1. **Navigate to Inbound**: https://resend.com/inbound
+2. **Create Inbound Email**:
+   - **Option A - Default Address**: Use the auto-generated `.resend.app` address
+   - **Option B - Custom Domain**:
+     - Add your domain if not already added
+     - Create custom address (e.g., `invoices@yourdomain.com`)
+     - Configure DNS records as shown in Resend dashboard
+3. **Link to Webhook**: Select the webhook you created in step 1
+
+### 3. Test the Integration
+
+Send a test email with an invoice PDF to your configured address:
+
+**To**: `invoices@yourdomain.com` (or your `.resend.app` address)
+**Subject**: Invoice #12345
+**Attachment**: Any PDF invoice
+
+### 4. Verify in Admin UI
+
+1. Visit: https://simplicate-automations.vercel.app/admin/email/inbox
+2. You should see the received email
+3. If it has an invoice attachment, a draft `PurchasingInvoice` should be created
+4. Check the OCR results and invoice data
+
+### 5. Monitor Logs
+
+Check Vercel logs for any errors:
+```bash
+npx vercel logs https://simplicate-automations.vercel.app --follow
+```
+
+Look for log entries like:
+- `[Inbound Email] From: ..., To: ..., Subject: ...`
+- `[Attachment] Downloading ... from ...`
+- `[Invoice Processing] Running OCR on ...`
+- `[Invoice Processing] Created draft invoice: ...`

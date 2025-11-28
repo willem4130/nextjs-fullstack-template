@@ -1,13 +1,13 @@
 /**
  * Inbound Email Webhook
  *
- * Receives emails from SendGrid Inbound Parse and processes them.
- * https://docs.sendgrid.com/for-developers/parsing-email/setting-up-the-inbound-parse-webhook
+ * Receives emails from Resend Inbound Parse and processes them.
+ * https://resend.com/docs/dashboard/webhooks/introduction
  *
  * This endpoint:
- * 1. Parses the multipart form data from SendGrid
+ * 1. Parses the JSON webhook payload from Resend
  * 2. Classifies the email (invoice/contract/other)
- * 3. Extracts attachments
+ * 3. Downloads attachments from Resend
  * 4. For invoices: runs OCR and creates draft invoice
  * 5. For contracts: stores for manual processing
  */
@@ -22,8 +22,27 @@ export const runtime = 'nodejs';
 export const maxDuration = 60; // 60 seconds for OCR processing
 
 /**
- * Parse attachment from SendGrid format
+ * Resend webhook payload structure
  */
+interface ResendWebhookPayload {
+  type: 'email.received';
+  created_at: string;
+  data: {
+    from: string;
+    to: string[];
+    subject: string;
+    html?: string;
+    text?: string;
+    reply_to?: string;
+    attachments?: Array<{
+      filename: string;
+      content_type: string;
+      size: number;
+      url: string; // Download URL
+    }>;
+  };
+}
+
 interface ParsedAttachment {
   filename: string;
   contentType: string;
@@ -31,81 +50,89 @@ interface ParsedAttachment {
   data: Buffer;
 }
 
-async function parseAttachments(
-  formData: FormData,
+/**
+ * Download attachments from Resend URLs
+ */
+async function downloadAttachments(
+  attachments: ResendWebhookPayload['data']['attachments'],
 ): Promise<ParsedAttachment[]> {
-  const attachments: ParsedAttachment[] = [];
-
-  // SendGrid sends attachments as individual form fields
-  // with names like "attachment1", "attachment2", etc.
-  let index = 1;
-  while (true) {
-    const attachmentKey = `attachment${index}`;
-    const file = formData.get(attachmentKey);
-
-    if (!file || !(file instanceof File)) {
-      break; // No more attachments
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    attachments.push({
-      filename: file.name || `attachment${index}`,
-      contentType: file.type || 'application/octet-stream',
-      size: buffer.length,
-      data: buffer,
-    });
-
-    index++;
+  if (!attachments || attachments.length === 0) {
+    return [];
   }
 
-  // Also check for "attachmentN" format with info fields
-  for (const [key, value] of formData.entries()) {
-    if (key.startsWith('attachment-info')) {
-      // SendGrid also sends attachment info separately
-      // We've already processed the main attachments above
-      continue;
+  const downloaded: ParsedAttachment[] = [];
+
+  for (const att of attachments) {
+    try {
+      console.log(`[Attachment] Downloading ${att.filename} from ${att.url}`);
+
+      const response = await fetch(att.url);
+      if (!response.ok) {
+        console.error(`[Attachment] Failed to download ${att.filename}: ${response.status}`);
+        continue;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      downloaded.push({
+        filename: att.filename,
+        contentType: att.content_type,
+        size: att.size,
+        data: buffer,
+      });
+
+      console.log(`[Attachment] Downloaded ${att.filename} (${buffer.length} bytes)`);
+    } catch (error) {
+      console.error(`[Attachment] Error downloading ${att.filename}:`, error);
     }
   }
 
-  return attachments;
+  return downloaded;
 }
 
 /**
  * POST /api/email/inbound
  *
- * Webhook endpoint for SendGrid Inbound Parse
+ * Webhook endpoint for Resend Inbound Parse
  */
 export async function POST(request: NextRequest) {
   try {
-    // Parse form data
-    const formData = await request.formData();
+    // Parse JSON payload from Resend
+    const payload: ResendWebhookPayload = await request.json();
 
-    // Extract email fields
-    const from = formData.get('from') as string;
-    const to = formData.get('to') as string;
-    const subject = formData.get('subject') as string;
-    const text = formData.get('text') as string;
-    const html = formData.get('html') as string;
+    // Validate webhook type
+    if (payload.type !== 'email.received') {
+      return NextResponse.json(
+        { error: 'Invalid webhook type' },
+        { status: 400 },
+      );
+    }
 
-    if (!from || !to || !subject) {
+    const { from, to, subject, text, html, attachments } = payload.data;
+
+    if (!from || !to || to.length === 0 || !subject) {
       return NextResponse.json(
         { error: 'Missing required email fields' },
         { status: 400 },
       );
     }
 
-    console.log(`[Inbound Email] From: ${from}, To: ${to}, Subject: ${subject}`);
+    // Use the first recipient address for classification
+    const toAddress = to[0];
 
-    // Parse attachments
-    const attachments = await parseAttachments(formData);
-    console.log(`[Inbound Email] Found ${attachments.length} attachments`);
+    console.log(`[Inbound Email] From: ${from}, To: ${toAddress}, Subject: ${subject}`);
+
+    // Download attachments
+    const downloadedAttachments = await downloadAttachments(attachments);
+    console.log(`[Inbound Email] Downloaded ${downloadedAttachments.length} attachments`);
 
     // Classify email
     const classification = await classifyEmail(
-      to,
+      toAddress ?? '',
       subject,
       text || html || '',
-      attachments.map((a) => a.filename),
+      downloadedAttachments.map((a) => a.filename),
     );
 
     console.log(
@@ -116,14 +143,14 @@ export async function POST(request: NextRequest) {
     const email = await db.inboundEmail.create({
       data: {
         from,
-        to,
+        to: toAddress ?? '',
         subject,
         body: text || html,
         type: classification.type,
         classifiedBy: classification.classifiedBy,
         processed: false,
         attachments: {
-          create: attachments.map((att) => ({
+          create: downloadedAttachments.map((att) => ({
             filename: att.filename,
             contentType: att.contentType,
             size: att.size,
@@ -140,9 +167,9 @@ export async function POST(request: NextRequest) {
 
     // Process based on type
     if (classification.type === 'INVOICE') {
-      await processInvoiceEmail(email.id, attachments, from, subject, text);
+      await processInvoiceEmail(email.id, downloadedAttachments, from, subject, text || html || '');
     } else if (classification.type === 'CONTRACT') {
-      await processContractEmail(email.id, attachments);
+      await processContractEmail(email.id, downloadedAttachments);
     }
 
     // Mark as processed
