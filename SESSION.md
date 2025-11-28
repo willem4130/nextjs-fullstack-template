@@ -1,6 +1,6 @@
 # Session State - Simplicate Automation System
 
-**Last Updated**: November 28, 2025, 1:00 PM
+**Last Updated**: November 28, 2025, 10:30 AM
 **Session Type**: Complex
 **Project**: Simplicate Automation System - Production Readiness Sprint
 
@@ -8,7 +8,7 @@
 
 ## Current Objective
 
-Get the application production-ready within 15 days. Focus on: Hours Reports with email sending, Financial Dashboard, Hours Reminders, and core workflows.
+Get the application production-ready. Focus on: testing all functionality, Dutch help documentation for end users, and email configuration.
 
 ---
 
@@ -16,119 +16,83 @@ Get the application production-ready within 15 days. Focus on: Hours Reports wit
 
 ### Completed Tasks
 
-- **Hours Reports Page** (`/admin/email/hours-reports`):
-  - Month and employee selection dropdowns
-  - Stats cards (employees, hours, km, expenses for period)
-  - Full report preview with hours by project, kilometers, expenses, totals
-  - **Send email button now works** - sends formatted HTML email to freelancer
+- **Email System Configured & Tested**:
+  - Added RESEND_API_KEY to Vercel production environment
+  - Pushed missing SentEmail table to production database
+  - Successfully sent test emails to willem@scex.nl
+  - Email stats: 2 sent, 0 failed
 
-- **Financial Dashboard** (`/admin/financials`):
-  - Overview cards: Revenue, Cost, Margin, Hours
-  - Month-over-month comparison with trend indicators
-  - Monthly trend mini chart
-  - Project breakdown table with margin percentages
-  - Employee breakdown table with effective rates
-  - Tabbed interface for switching between views
+- **Dutch Help Documentation** (`/admin/help`):
+  - Complete help page with accordion UI
+  - Sections: Aan de Slag, Data Synchroniseren, Uren Rapporten, Uren Herinneringen, E-mail Templates, Contract Workflow, Verzonden E-mails
+  - FAQ with 5 common questions
+  - Help link added to sidebar navigation
 
-- **Hours Reminders Workflow** (`/admin/email/hours-reminders`):
-  - Weekly cron job (Mondays 8:00 UTC) queues reminders
-  - Queue processor finds employees without hours, sends email reminders
-  - Manual trigger UI with preview of who would receive reminders
-  - Stats cards showing total users, needing reminder, submitted hours
-  - User table with hours logged and status
+- **CLAUDE.md Updated**:
+  - Added Testing Rules: ONLY use willem@scex.nl for email testing
+  - Documented Willem's user ID for quick tests
+  - Added test email command example
+  - Documented required environment variables
+  - Added useful production URLs
 
-- **Contract Distribution Workflow**:
-  - Webhook handler receives `project.employee.linked` events
-  - Validates project exists before queueing
-  - Queue processor creates Contract record and sends notification
-  - Full end-to-end flow tested
-
-- **Cleanup**:
-  - Removed sync buttons from Hours and Invoices pages
-  - Centralized sync functionality to Settings page
-  - Added HOURS_REPORT to EmailTemplateType enum
+- **Previous Session Work** (already done):
+  - Hours Reports with email sending
+  - Financial Dashboard
+  - Hours Reminders workflow
+  - Contract Distribution workflow
 
 ### Pending Tasks
 
 - Employee Self-Service Portal (view hours, upload documents)
 - PDF export for hours reports
+- Authentication/Access Control (Tinus/Casper as owners, others limited)
 
 ---
 
 ## Key Decisions Made
 
-**Sync Button Removal**
-- **Choice**: Remove sync buttons from individual pages (Hours, Invoices)
-- **Rationale**: User requested centralized sync management via Settings
-- **Impact**: Cleaner UI, single place to trigger syncs
+**Email Testing Policy**
+- **Choice**: Only use willem@scex.nl for all email testing
+- **Rationale**: Avoid spamming real users during development
+- **Impact**: Documented in CLAUDE.md for future sessions
 
-**Hours Report Email (Direct Send)**
-- **Choice**: Generate email HTML directly without templates
-- **Rationale**: Report content is dynamic and doesn't fit template model
-- **Impact**: Created `sendHoursReportEmail()` function with inline HTML generation
+**Help Documentation Location**
+- **Choice**: Central /admin/help page with accordion sections + tooltips
+- **Rationale**: User preferred help page over inline-only help
+- **Impact**: Created comprehensive Dutch documentation
 
-**Financial Dashboard Architecture**
-- **Choice**: Query HoursEntry.revenue/cost/margin fields directly
-- **Rationale**: These fields are calculated during sync and stored per entry
-- **Impact**: Fast dashboard queries with groupBy aggregations
-
-**Hours Reminders Architecture**
-- **Choice**: Queue-based processing with cron trigger
-- **Rationale**: Consistent with existing workflow pattern, allows for retries
-- **Impact**: Weekly cron adds item to queue, processor handles email sending
+**Authentication Deferred**
+- **Choice**: Skip auth for now, focus on testing and docs
+- **Rationale**: User wants to test functionality first
+- **Impact**: Auth with email/password will be added later
 
 ---
 
 ## Files Modified
 
 ### Created
-- `src/server/api/routers/hoursReport.ts` - Hours report data aggregation and email sending
-- `src/server/api/routers/financials.ts` - Financial dashboard data (overview, by project, by employee, trends)
-- `src/app/admin/financials/page.tsx` - Financial Dashboard UI
-- `src/app/admin/email/hours-reminders/page.tsx` - Hours Reminders UI (manual trigger + preview)
-- `src/app/api/cron/hours-reminders/route.ts` - Weekly cron job for hours reminders
+- `src/app/admin/help/page.tsx` - Dutch help documentation with accordion UI
+- `src/components/ui/accordion.tsx` - shadcn accordion component
 
 ### Modified
-- `src/server/api/root.ts` - Registered hoursReport and financials routers
-- `src/app/admin/email/hours-reports/page.tsx` - Full implementation with send functionality
-- `src/app/admin/hours/page.tsx` - Removed sync button and related code
-- `src/app/admin/invoices/page.tsx` - Removed sync button and related code
-- `src/lib/email/service.ts` - Added `sendHoursReportEmail()` and `HoursReportEmailData` type
-- `prisma/schema.prisma` - Added HOURS_REPORT to EmailTemplateType enum
-- `src/app/api/cron/process-queue/route.ts` - Implemented `processHoursReminder` function
-- `src/server/api/routers/automation.ts` - Added `triggerHoursReminders`, `getHoursReminderPreview`
-- `src/app/admin/layout.tsx` - Added Hours Reminders nav item
-- `vercel.json` - Added weekly cron for hours reminders
+- `src/app/admin/layout.tsx` - Added HelpCircle icon import and Help nav item
+- `CLAUDE.md` - Added Testing Rules, Environment Variables, Useful URLs sections
 
 ---
 
 ## Architecture Notes
 
-**hoursReport Router Procedures**:
-- `getEmployeesWithHours` - Get employees with hours in a period
-- `generateReport` - Generate full report data for preview
-- `getAvailableMonths` - Get months with hours data
-- `getReportStats` - Get aggregated stats for period
-- `sendReport` - Send formatted email to employee
+**Email System**:
+- Uses Resend (resend.com) for transactional emails
+- Environment: `RESEND_API_KEY`, `EMAIL_FROM`
+- Sent emails tracked in `SentEmail` table
+- Test command: `curl -s -X POST "https://simplicate-automations.vercel.app/api/trpc/hoursReport.sendReport" -H "Content-Type: application/json" -d '{"json":{"employeeId":"cmiigv6fp000cjp045dym3457","month":"2025-11"}}'`
 
-**financials Router Procedures**:
-- `getOverview` - Aggregated revenue/cost/margin for period
-- `getByProject` - Financials grouped by project
-- `getByEmployee` - Financials grouped by employee
-- `getMonthlyTrend` - 6-month trend data
-- `getAvailableMonths` - Months with financial data
-
-**Hours Reminders Flow**:
-1. Cron `/api/cron/hours-reminders` runs weekly (Monday 8:00 UTC)
-2. Creates WorkflowQueue item with HOURS_REMINDER type
-3. Queue processor `/api/cron/process-queue` picks up item
-4. `processHoursReminder()` finds users without hours, sends emails
-
-**Contract Distribution Flow**:
-1. Webhook receives `project.employee.linked` event
-2. Validates project exists in database
-3. Creates WorkflowQueue item with CONTRACT_DISTRIBUTION type
-4. Queue processor creates Contract record and sends notification
+**Help Page Structure**:
+- Accordion-based expandable sections
+- Each section covers one feature area
+- FAQ at bottom for common questions
+- Links to relevant pages within documentation
 
 ---
 
@@ -136,20 +100,22 @@ Get the application production-ready within 15 days. Focus on: Hours Reports wit
 
 **Production URL**: https://simplicate-automations.vercel.app/
 
-**New URLs Added**:
+**Key URLs**:
+- Help (Dutch): https://simplicate-automations.vercel.app/admin/help
 - Hours Reports: https://simplicate-automations.vercel.app/admin/email/hours-reports
-- Hours Reminders: https://simplicate-automations.vercel.app/admin/email/hours-reminders
-- Financial Dashboard: https://simplicate-automations.vercel.app/admin/financials
+- Sent Emails: https://simplicate-automations.vercel.app/admin/email/sent
+- Settings/Sync: https://simplicate-automations.vercel.app/admin/settings
 
-**15-Day Roadmap** (user wants production-ready):
-| Priority | Task | Status |
-|----------|------|--------|
-| 1 | Hours Reports with email | Done |
-| 2 | Financial Dashboard | Done |
-| 3 | Hours Reminders workflow | Done |
-| 4 | Contract workflow E2E | Tested |
-| 5 | Employee Portal | Next |
-| 6 | PDF export | Pending |
+**Testing**:
+- Willem's user ID: `cmiigv6fp000cjp045dym3457`
+- Willem's email: willem@scex.nl
+- 426 hours entries synced, 12 projects
+
+**User Preferences**:
+- Tinus and Casper should be owners (full access)
+- Other employees limited access (future Employee Portal)
+- Authentication: email + password (deferred)
+- Help docs in Dutch
 
 ---
 
@@ -163,35 +129,48 @@ I'm continuing work on the Simplicate Automations production-readiness sprint.
 
 Read these files first:
 - SESSION.md (detailed session context)
-- CLAUDE.md (project overview)
+- CLAUDE.md (project overview + testing rules)
 
-Current Status: 4 of 6 roadmap items complete (Hours Reports, Financial Dashboard, Hours Reminders, Contract workflow)
+Current Status: Email system working, Dutch help docs complete
 
 Just Completed:
-- Hours Reminders workflow with weekly cron and manual trigger UI
-- Contract Distribution workflow end-to-end tested
-- Fixed Prisma query bug for email filtering
+- Configured Resend API key in Vercel production
+- Created Dutch help documentation at /admin/help
+- Tested email sending (2 emails sent successfully)
+- Added testing rules to CLAUDE.md (only use willem@scex.nl)
 
 Next Steps (15-day production roadmap):
 1. Build Employee Self-Service Portal (view own hours, upload documents)
 2. Add PDF export to hours reports
+3. Add authentication (email/password) with owner roles for Tinus/Casper
 
 Key Files:
-- src/app/api/cron/process-queue/route.ts - Queue processor with all workflow handlers
-- src/server/api/routers/automation.ts - Automation router with hours reminders
-- src/app/admin/email/hours-reminders/page.tsx - Hours reminders UI
-- src/app/api/webhooks/simplicate/route.ts - Webhook handler for contract distribution
+- src/app/admin/help/page.tsx - Dutch help documentation
+- src/app/admin/layout.tsx - Navigation with Help link
+- CLAUDE.md - Testing rules and URLs
+
+Testing:
+- ONLY use willem@scex.nl for email tests
+- Willem's user ID: cmiigv6fp000cjp045dym3457
 
 URLs:
 - Production: https://simplicate-automations.vercel.app/
-- Hours Reminders: https://simplicate-automations.vercel.app/admin/email/hours-reminders
-- Financials: https://simplicate-automations.vercel.app/admin/financials
+- Help: https://simplicate-automations.vercel.app/admin/help
+- Hours Reports: https://simplicate-automations.vercel.app/admin/email/hours-reports
 
 ---
 
 ---
 
 ## Previous Session Notes
+
+**Session: November 28, 2025, 10:30 AM - Email Setup, Testing & Help Docs**
+- Configured RESEND_API_KEY in Vercel
+- Pushed missing SentEmail table to production database
+- Sent test emails to willem@scex.nl (success)
+- Created Dutch help documentation page
+- Added Help link to navigation
+- Updated CLAUDE.md with testing rules
 
 **Session: November 28, 2025, 1:00 PM - Hours Reminders + Contract Testing**
 - Implemented processHoursReminder in queue processor
@@ -216,10 +195,6 @@ URLs:
 - Implemented Sent Emails page with real data, stats, filtering
 - Implemented Document Requests page with real data, approve/reject actions
 
-**Session: November 27, 2025, 4:15 PM - Email Automation Phase 0**
-- Fixed navigation: added expandable Automation section
-- Added syncProjectMembers to fix "Stuur Email" showing no members
-
 **Session: November 27, 2025, 2:30 PM - Email Automation MVP**
 - Built complete email automation system with templates
 - Upload portal with Vercel Blob
@@ -227,8 +202,8 @@ URLs:
 
 ---
 
-**Session Complexity**: Complex (10+ files modified)
+**Session Complexity**: Complex (multiple features, database changes, deployments)
 **Build Status**: Typecheck passes
-**Deployment Status**: Deployed to Vercel (auto-deploy from GitHub push)
+**Deployment Status**: Deployed to Vercel production
 
 ---

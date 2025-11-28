@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Bell,
   HelpCircle,
+  Link2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -90,6 +91,11 @@ const navItems: NavItem[] = [
     title: 'Workflows',
     href: '/admin/workflows',
     icon: Workflow,
+  },
+  {
+    title: 'Portal Links',
+    href: '/admin/portal',
+    icon: Link2,
   },
 ]
 
