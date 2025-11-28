@@ -12,6 +12,7 @@ export interface EmailOptions {
   subject: string;
   html: string;
   from?: string;
+  replyTo?: string;
   attachments?: Array<{
     filename: string;
     content: Buffer | string;
@@ -30,6 +31,7 @@ export async function sendEmail(options: EmailOptions) {
       to: Array.isArray(options.to) ? options.to : [options.to],
       subject: options.subject,
       html: options.html,
+      replyTo: options.replyTo || env.EMAIL_REPLY_TO,
       attachments: options.attachments,
     });
 
@@ -135,7 +137,7 @@ export async function sendContractEmail(options: {
         </div>
         <div class="footer">
           <p>Simplicate Automation System</p>
-          <p>This is an automated message, please do not reply.</p>
+          <p>Questions? Simply reply to this email.</p>
         </div>
       </body>
     </html>

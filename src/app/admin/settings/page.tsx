@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Bell, Lock, Palette, Globe, Database, Shield, RefreshCw, Users, AlertTriangle, Clock, FileText, Briefcase } from 'lucide-react'
+import { Bell, Lock, Palette, Globe, Database, Shield, RefreshCw, Users, AlertTriangle, Clock, FileText, Briefcase, Mail } from 'lucide-react'
 import { api } from '@/trpc/react'
 import { useState, useEffect } from 'react'
 
@@ -672,6 +672,56 @@ export default function SettingsPage() {
                 </p>
               </div>
               <Badge variant="secondary">Disabled</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Email Configuration */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              <CardTitle>Email Configuration</CardTitle>
+            </div>
+            <CardDescription>Configure email addresses for sending and receiving</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="emailFrom">From Address</Label>
+              <Input
+                id="emailFrom"
+                type="email"
+                defaultValue={process.env.NEXT_PUBLIC_EMAIL_FROM || 'noreply@example.com'}
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-sm text-muted-foreground">
+                Sender address for outgoing emails (configured in environment variables)
+              </p>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label htmlFor="emailReplyTo">Reply-To Address (Inbound)</Label>
+              <Input
+                id="emailReplyTo"
+                type="email"
+                defaultValue="invoices@phatenau.resend.app"
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-sm text-muted-foreground">
+                Replies to automated emails will be sent here and processed automatically
+              </p>
+            </div>
+            <Separator />
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-medium text-blue-900">Inbound Email Processing</p>
+              <p className="text-sm text-blue-700 mt-1">
+                Send invoices and contracts to <strong>invoices@phatenau.resend.app</strong> or <strong>contracts@phatenau.resend.app</strong>
+              </p>
+              <p className="text-sm text-blue-600 mt-2">
+                Attachments will be automatically processed with OCR and added to the system
+              </p>
             </div>
           </CardContent>
         </Card>

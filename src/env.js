@@ -28,6 +28,7 @@ export const env = createEnv({
     // Email (Resend)
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email().default('noreply@example.com'),
+    EMAIL_REPLY_TO: z.string().email().optional(), // Inbound email for replies
     // Slack (optional)
     SLACK_BOT_TOKEN: z.string().optional(),
   },
@@ -65,6 +66,7 @@ export const env = createEnv({
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO,
     SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
     // NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
