@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/trpc/react'
 import { useState, useMemo } from 'react'
+import { Send, CheckCircle, AlertCircle } from 'lucide-react'
 
 // Format currency
 function formatCurrency(amount: number): string {
@@ -51,6 +52,30 @@ function formatHours(hours: number): string {
 export default function HoursReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
+  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // Send report mutation
+  const sendReport = api.hoursReport.sendReport.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        setSendResult({ success: true, message: `Email verzonden naar ${data.recipientEmail}` })
+      } else {
+        setSendResult({ success: false, message: data.error || 'Er is een fout opgetreden' })
+      }
+      // Clear message after 5 seconds
+      setTimeout(() => setSendResult(null), 5000)
+    },
+    onError: (error) => {
+      setSendResult({ success: false, message: error.message })
+      setTimeout(() => setSendResult(null), 5000)
+    },
+  })
+
+  const handleSendReport = () => {
+    if (selectedEmployee && selectedMonth) {
+      sendReport.mutate({ employeeId: selectedEmployee, month: selectedMonth })
+    }
+  }
 
   // Get available months
   const { data: months, isLoading: monthsLoading } = api.hoursReport.getAvailableMonths.useQuery({
@@ -468,13 +493,41 @@ export default function HoursReportsPage() {
               </div>
             </div>
 
+            {/* Send Result Message */}
+            {sendResult && (
+              <div
+                className={`flex items-center gap-2 p-3 rounded-lg ${
+                  sendResult.success
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}
+              >
+                {sendResult.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <span>{sendResult.message}</span>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" disabled>
                 Download PDF
               </Button>
-              <Button disabled>
-                Verstuur naar {report.employee.name || report.employee.email}
+              <Button onClick={handleSendReport} disabled={sendReport.isPending}>
+                {sendReport.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verzenden...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Verstuur naar {report.employee.name || report.employee.email}
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>

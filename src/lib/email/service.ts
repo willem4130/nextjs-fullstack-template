@@ -311,3 +311,224 @@ export function getDefaultContractReminderHtml(): string {
 export function getDefaultContractReminderSubject(): string {
   return 'Contract vereist voor {{projectName}}';
 }
+
+// Hours Report Email Types
+export interface HoursReportEmailData {
+  employee: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  period: {
+    label: string;
+  };
+  hours: {
+    byProject: Array<{
+      projectName: string;
+      clientName: string | null;
+      totalHours: number;
+      hourlyRate: number | null;
+      totalAmount: number | null;
+    }>;
+    totalHours: number;
+    totalAmount: number | null;
+  };
+  kilometers: {
+    totalKm: number;
+    kmRate: number;
+    totalAmount: number;
+  };
+  expenses: {
+    totalAmount: number;
+  };
+  totals: {
+    hoursAmount: number | null;
+    kmAmount: number;
+    expensesAmount: number;
+    grandTotal: number | null;
+  };
+}
+
+// Format currency for email
+function formatCurrencyEmail(amount: number): string {
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(amount);
+}
+
+// Generate hours report email HTML
+export function generateHoursReportEmailHtml(data: HoursReportEmailData): string {
+  const employeeName = data.employee.name || data.employee.email;
+
+  // Build hours table rows
+  const hoursRows = data.hours.byProject.map(project => `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
+        <strong>${project.projectName}</strong>
+        ${project.clientName ? `<br><span style="color: #718096; font-size: 12px;">${project.clientName}</span>` : ''}
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${project.totalHours.toFixed(1)}u</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${project.hourlyRate ? formatCurrencyEmail(project.hourlyRate) + '/u' : '-'}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${project.totalAmount ? formatCurrencyEmail(project.totalAmount) : '-'}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <p>Beste ${employeeName},</p>
+
+    <p>Hierbij ontvang je het urenoverzicht voor <strong>${data.period.label}</strong>.</p>
+
+    <h3 style="margin-top: 30px; margin-bottom: 15px; color: #333;">Uren per Project</h3>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <thead>
+        <tr style="background: #f7fafc;">
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Project</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Uren</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Tarief</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Bedrag</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${hoursRows}
+        <tr style="background: #f7fafc; font-weight: bold;">
+          <td style="padding: 10px;">Totaal Uren</td>
+          <td style="padding: 10px; text-align: right;">${data.hours.totalHours.toFixed(1)}u</td>
+          <td style="padding: 10px;"></td>
+          <td style="padding: 10px; text-align: right;">${data.hours.totalAmount ? formatCurrencyEmail(data.hours.totalAmount) : '-'}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${data.kilometers.totalKm > 0 ? `
+    <h3 style="margin-top: 30px; margin-bottom: 15px; color: #333;">Kilometers</h3>
+    <div class="info-box">
+      <strong>${data.kilometers.totalKm} km</strong> x ${formatCurrencyEmail(data.kilometers.kmRate)}/km = <strong>${formatCurrencyEmail(data.kilometers.totalAmount)}</strong>
+    </div>
+    ` : ''}
+
+    ${data.expenses.totalAmount > 0 ? `
+    <h3 style="margin-top: 30px; margin-bottom: 15px; color: #333;">Onkosten</h3>
+    <div class="info-box">
+      Totaal: <strong>${formatCurrencyEmail(data.expenses.totalAmount)}</strong>
+    </div>
+    ` : ''}
+
+    <div style="background: #667eea; color: white; padding: 20px; border-radius: 8px; margin-top: 30px;">
+      <h3 style="margin: 0 0 15px 0; color: white;">Totaaloverzicht</h3>
+      <table style="width: 100%; color: white;">
+        <tr>
+          <td style="padding: 5px 0;">Uren</td>
+          <td style="padding: 5px 0; text-align: right;">${data.totals.hoursAmount ? formatCurrencyEmail(data.totals.hoursAmount) : '-'}</td>
+        </tr>
+        ${data.totals.kmAmount > 0 ? `
+        <tr>
+          <td style="padding: 5px 0;">Kilometers</td>
+          <td style="padding: 5px 0; text-align: right;">${formatCurrencyEmail(data.totals.kmAmount)}</td>
+        </tr>
+        ` : ''}
+        ${data.totals.expensesAmount > 0 ? `
+        <tr>
+          <td style="padding: 5px 0;">Onkosten</td>
+          <td style="padding: 5px 0; text-align: right;">${formatCurrencyEmail(data.totals.expensesAmount)}</td>
+        </tr>
+        ` : ''}
+        <tr style="border-top: 1px solid rgba(255,255,255,0.3);">
+          <td style="padding: 10px 0 0 0; font-size: 18px; font-weight: bold;">Totaal</td>
+          <td style="padding: 10px 0 0 0; text-align: right; font-size: 18px; font-weight: bold;">${data.totals.grandTotal ? formatCurrencyEmail(data.totals.grandTotal) : '-'}</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="margin-top: 30px; color: #718096; font-size: 14px;">
+      Dit is een automatisch gegenereerd overzicht. Neem contact op als je vragen hebt.
+    </p>
+
+    <p>Met vriendelijke groet,<br>Het team</p>
+  `;
+}
+
+// Send hours report email directly (without template)
+export async function sendHoursReportEmail(
+  recipient: { userId: string; email: string; name: string | null },
+  reportData: HoursReportEmailData
+): Promise<SendEmailResult> {
+  const subject = `Urenoverzicht ${reportData.period.label}`;
+  const bodyHtml = generateHoursReportEmailHtml(reportData);
+  const fullHtml = wrapInEmailTemplate(bodyHtml, `Urenoverzicht ${reportData.period.label}`);
+
+  // Create SentEmail record first (PENDING status)
+  const sentEmail = await db.sentEmail.create({
+    data: {
+      templateId: null, // No template, direct send
+      projectId: null,
+      userId: recipient.userId,
+      toEmail: recipient.email,
+      subject,
+      status: 'PENDING',
+    },
+  });
+
+  // Check if Resend is configured
+  if (!resend) {
+    console.warn('[Email] Resend not configured, marking as failed');
+    await db.sentEmail.update({
+      where: { id: sentEmail.id },
+      data: {
+        status: 'FAILED',
+        error: 'Email service not configured',
+      },
+    });
+    return {
+      success: false,
+      sentEmailId: sentEmail.id,
+      error: 'Email service not configured',
+    };
+  }
+
+  // Send via Resend
+  try {
+    const result = await resend.emails.send({
+      from: env.EMAIL_FROM,
+      to: [recipient.email],
+      subject,
+      html: fullHtml,
+    });
+
+    // Update SentEmail with success
+    await db.sentEmail.update({
+      where: { id: sentEmail.id },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        resendId: result.data?.id || null,
+      },
+    });
+
+    console.log(`[Email] Hours report sent successfully to ${recipient.email}:`, result.data?.id);
+
+    return {
+      success: true,
+      sentEmailId: sentEmail.id,
+      resendId: result.data?.id || undefined,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Email] Send hours report error:', error);
+
+    // Update SentEmail with failure
+    await db.sentEmail.update({
+      where: { id: sentEmail.id },
+      data: {
+        status: 'FAILED',
+        error: errorMessage,
+      },
+    });
+
+    return {
+      success: false,
+      sentEmailId: sentEmail.id,
+      error: errorMessage,
+    };
+  }
+}

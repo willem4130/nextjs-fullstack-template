@@ -832,6 +832,7 @@ model FilterPreset {
 enum EmailTemplateType {
   CONTRACT_REMINDER
   HOURS_REMINDER
+  HOURS_REPORT
   CUSTOM
 }
 

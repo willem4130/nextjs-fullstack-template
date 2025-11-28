@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc'
 import type { Prisma } from '@prisma/client'
+import { sendHoursReportEmail, type HoursReportEmailData } from '@/lib/email/service'
 
 // Type definitions for report data
 interface ProjectHours {
@@ -472,6 +473,171 @@ export const hoursReportRouter = createTRPCRouter({
         totalHours: hoursAggregate._sum.hours || 0,
         totalKilometers: kmAggregate._sum.kilometers || 0,
         totalExpenses: expensesAggregate._sum.amount || 0,
+      }
+    }),
+
+  // Send hours report email
+  sendReport: publicProcedure
+    .input(
+      z.object({
+        employeeId: z.string(),
+        month: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // First, generate the report data (reusing generateReport logic)
+      const monthNames = [
+        'Januari', 'Februari', 'Maart', 'April', 'Mei', 'Juni',
+        'Juli', 'Augustus', 'September', 'Oktober', 'November', 'December'
+      ]
+
+      const [year, month] = input.month.split('-').map(Number)
+      const start = new Date(year!, month! - 1, 1)
+      const end = new Date(year!, month!, 0, 23, 59, 59)
+      const periodLabel = `${monthNames[month! - 1]} ${year}`
+
+      // Get employee
+      const employee = await ctx.db.user.findUnique({
+        where: { id: input.employeeId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      })
+
+      if (!employee) {
+        throw new Error('Employee not found')
+      }
+
+      // Get hours entries
+      const hoursEntries = await ctx.db.hoursEntry.findMany({
+        where: {
+          userId: input.employeeId,
+          date: { gte: start, lte: end },
+        },
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              clientName: true,
+            },
+          },
+        },
+      })
+
+      // Group hours by project
+      const projectHoursMap = new Map<string, {
+        projectName: string
+        clientName: string | null
+        totalHours: number
+        hourlyRate: number | null
+        totalAmount: number | null
+      }>()
+
+      for (const entry of hoursEntries) {
+        const key = entry.projectId
+        if (!projectHoursMap.has(key)) {
+          projectHoursMap.set(key, {
+            projectName: entry.project.name,
+            clientName: entry.project.clientName,
+            totalHours: 0,
+            hourlyRate: entry.salesRate,
+            totalAmount: null,
+          })
+        }
+        const projectData = projectHoursMap.get(key)!
+        projectData.totalHours += entry.hours
+        if (entry.salesRate && !projectData.hourlyRate) {
+          projectData.hourlyRate = entry.salesRate
+        }
+      }
+
+      // Calculate totals
+      let totalHoursAmount: number | null = 0
+      for (const projectData of projectHoursMap.values()) {
+        if (projectData.hourlyRate) {
+          projectData.totalAmount = projectData.totalHours * projectData.hourlyRate
+          totalHoursAmount = (totalHoursAmount ?? 0) + projectData.totalAmount
+        } else {
+          totalHoursAmount = null
+        }
+      }
+
+      // Get km rate
+      const settings = await ctx.db.appSettings.findFirst()
+      const kmRate = settings?.kmRate || 0.23
+
+      // Get kilometer expenses
+      const kmExpenses = await ctx.db.expense.findMany({
+        where: {
+          userId: input.employeeId,
+          date: { gte: start, lte: end },
+          category: 'KILOMETERS',
+        },
+      })
+      const totalKm = kmExpenses.reduce((sum, e) => sum + (e.kilometers || 0), 0)
+      const kmAmount = totalKm * kmRate
+
+      // Get other expenses
+      const otherExpenses = await ctx.db.expense.findMany({
+        where: {
+          userId: input.employeeId,
+          date: { gte: start, lte: end },
+          category: { not: 'KILOMETERS' },
+        },
+      })
+      const totalExpenses = otherExpenses.reduce((sum, e) => sum + e.amount, 0)
+
+      // Calculate grand total
+      let grandTotal: number | null = null
+      if (totalHoursAmount !== null) {
+        grandTotal = totalHoursAmount + kmAmount + totalExpenses
+      }
+
+      // Build email data
+      const emailData: HoursReportEmailData = {
+        employee: {
+          id: employee.id,
+          name: employee.name,
+          email: employee.email,
+        },
+        period: {
+          label: periodLabel,
+        },
+        hours: {
+          byProject: Array.from(projectHoursMap.values()),
+          totalHours: hoursEntries.reduce((sum, e) => sum + e.hours, 0),
+          totalAmount: totalHoursAmount,
+        },
+        kilometers: {
+          totalKm,
+          kmRate,
+          totalAmount: kmAmount,
+        },
+        expenses: {
+          totalAmount: totalExpenses,
+        },
+        totals: {
+          hoursAmount: totalHoursAmount,
+          kmAmount,
+          expensesAmount: totalExpenses,
+          grandTotal,
+        },
+      }
+
+      // Send the email
+      const result = await sendHoursReportEmail(
+        { userId: employee.id, email: employee.email, name: employee.name },
+        emailData
+      )
+
+      return {
+        success: result.success,
+        sentEmailId: result.sentEmailId,
+        error: result.error,
+        recipientEmail: employee.email,
       }
     }),
 })
