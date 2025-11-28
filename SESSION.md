@@ -1,14 +1,14 @@
 # Session State - Simplicate Automation System
 
-**Last Updated**: November 27, 2025, 6:15 PM
-**Session Type**: Standard
-**Project**: Simplicate Automation System - Email Automation Phase 2
+**Last Updated**: November 28, 2025, 10:30 AM
+**Session Type**: Complex
+**Project**: Simplicate Automation System - Production Readiness Sprint
 
 ---
 
 ## Current Objective
 
-Implement Phase 2 of the email automation system - Hours Reports page for generating detailed reports for freelancers.
+Get the application production-ready within 15 days. Focus on: Hours Reports with email sending, Financial Dashboard, and core workflows.
 
 ---
 
@@ -16,65 +16,89 @@ Implement Phase 2 of the email automation system - Hours Reports page for genera
 
 ### Completed Tasks
 
-- Created `hoursReport` router with data aggregation procedures:
-  - `getEmployeesWithHours` - Get employees with hours in a period
-  - `generateReport` - Generate full report with hours, km, expenses, totals
-  - `getAvailableMonths` - Get months with hours data
-  - `getReportStats` - Get stats for period
-- Implemented Hours Reports page (`/admin/email/hours-reports`) with:
+- **Hours Reports Page** (`/admin/email/hours-reports`):
   - Month and employee selection dropdowns
   - Stats cards (employees, hours, km, expenses for period)
   - Full report preview with hours by project, kilometers, expenses, totals
-- Removed sync buttons from Hours and Invoices pages (centralize sync to Settings)
-- Deployed to production
+  - **Send email button now works** - sends formatted HTML email to freelancer
 
-### Pending Tasks (Phase 2 - Remaining)
+- **Financial Dashboard** (`/admin/financials`):
+  - Overview cards: Revenue, Cost, Margin, Hours
+  - Month-over-month comparison with trend indicators
+  - Monthly trend mini chart
+  - Project breakdown table with margin percentages
+  - Employee breakdown table with effective rates
+  - Tabbed interface for switching between views
 
-- Add send report functionality (email with report data)
-- Add PDF download functionality
-- Add HOURS_REPORT email template type
+- **Cleanup**:
+  - Removed sync buttons from Hours and Invoices pages
+  - Centralized sync functionality to Settings page
+  - Added HOURS_REPORT to EmailTemplateType enum
+
+### Pending Tasks
+
+- Hours Reminders workflow (automated reminders for employees to submit hours)
+- Employee Self-Service Portal (view hours, upload documents)
+- PDF export for hours reports
+- Contract workflow end-to-end testing
 
 ---
 
 ## Key Decisions Made
 
-**Status Enums**
-- **Choice**: Use only statuses defined in Prisma schema
-- **Rationale**: DocumentRequestStatus only has PENDING, UPLOADED, VERIFIED, REJECTED (no EXPIRED)
-- **Impact**: Removed EXPIRED from UI and router to match schema
+**Sync Button Removal**
+- **Choice**: Remove sync buttons from individual pages (Hours, Invoices)
+- **Rationale**: User requested centralized sync management via Settings
+- **Impact**: Cleaner UI, single place to trigger syncs
 
-**Toast Notifications**
-- **Choice**: Removed toast notifications from Document Requests page
-- **Rationale**: sonner package not installed in project
-- **Impact**: Actions complete silently (data refreshes automatically via invalidation)
+**Hours Report Email (Direct Send)**
+- **Choice**: Generate email HTML directly without templates
+- **Rationale**: Report content is dynamic and doesn't fit template model
+- **Impact**: Created `sendHoursReportEmail()` function with inline HTML generation
+
+**Financial Dashboard Architecture**
+- **Choice**: Query HoursEntry.revenue/cost/margin fields directly
+- **Rationale**: These fields are calculated during sync and stored per entry
+- **Impact**: Fast dashboard queries with groupBy aggregations
 
 ---
 
 ## Files Modified
 
+### Created
+- `src/server/api/routers/hoursReport.ts` - Hours report data aggregation and email sending
+- `src/server/api/routers/financials.ts` - Financial dashboard data (overview, by project, by employee, trends)
+- `src/app/admin/financials/page.tsx` - Financial Dashboard UI
+
 ### Modified
-- `src/server/api/routers/projectEmails.ts` - Added 4 new router procedures: `getAllSentEmails`, `getAllSentEmailStats`, `getAllDocumentRequests`, `getAllDocumentRequestStats`
-- `src/app/admin/email/sent/page.tsx` - Full implementation with stats cards, tabbed filtering (All/Sent/Pending/Failed), data table with project links and status badges
-- `src/app/admin/email/documents/page.tsx` - Full implementation with stats cards, tabbed filtering, action dropdown for approve/reject uploaded documents
+- `src/server/api/root.ts` - Registered hoursReport and financials routers
+- `src/app/admin/email/hours-reports/page.tsx` - Full implementation with send functionality
+- `src/app/admin/hours/page.tsx` - Removed sync button and related code
+- `src/app/admin/invoices/page.tsx` - Removed sync button and related code
+- `src/lib/email/service.ts` - Added `sendHoursReportEmail()` and `HoursReportEmailData` type
+- `prisma/schema.prisma` - Added HOURS_REPORT to EmailTemplateType enum
 
 ---
 
 ## Architecture Notes
 
-**Sent Emails Page Features**:
-- Stats cards: Total, Successful (SENT), Failed
-- Tabbed view: Alle, Verzonden, Wachtend, Mislukt
-- Table columns: Date, Recipient (name + email), Subject, Project link, Template badge, Status badge
+**hoursReport Router Procedures**:
+- `getEmployeesWithHours` - Get employees with hours in a period
+- `generateReport` - Generate full report data for preview
+- `getAvailableMonths` - Get months with hours data
+- `getReportStats` - Get aggregated stats for period
+- `sendReport` - Send formatted email to employee
 
-**Document Requests Page Features**:
-- Stats cards: Total, Pending, Uploaded, Verified
-- Tabbed view: Alle, Wachtend, Geupload, Geverifieerd
-- Table columns: Date, User (name + email), Project link, Type badge, Document download link, Status badge
-- Action dropdown (for UPLOADED status): View, Goedkeuren (VERIFIED), Afwijzen (REJECTED)
+**financials Router Procedures**:
+- `getOverview` - Aggregated revenue/cost/margin for period
+- `getByProject` - Financials grouped by project
+- `getByEmployee` - Financials grouped by employee
+- `getMonthlyTrend` - 6-month trend data
+- `getAvailableMonths` - Months with financial data
 
-**Status Enums**:
-- `SentEmailStatus`: PENDING, SENT, FAILED
-- `DocumentRequestStatus`: PENDING, UPLOADED, VERIFIED, REJECTED
+**Financial Data Source**:
+- HoursEntry has: salesRate, costRate, revenue, cost, margin
+- These are calculated during syncHours() from rates resolver
 
 ---
 
@@ -82,15 +106,19 @@ Implement Phase 2 of the email automation system - Hours Reports page for genera
 
 **Production URL**: https://simplicate-automations.vercel.app/
 
-**Email Section URLs**:
-- Templates: https://simplicate-automations.vercel.app/admin/email/templates
-- Sent Emails: https://simplicate-automations.vercel.app/admin/email/sent
-- Documents: https://simplicate-automations.vercel.app/admin/email/documents
-- Hours Reports: https://simplicate-automations.vercel.app/admin/email/hours-reports (stub)
+**New URLs Added**:
+- Hours Reports: https://simplicate-automations.vercel.app/admin/email/hours-reports
+- Financial Dashboard: https://simplicate-automations.vercel.app/admin/financials
 
-**Gotchas**:
-- No toast library (sonner) installed - removed toast notifications
-- DocumentRequestStatus has no EXPIRED status in Prisma schema
+**15-Day Roadmap** (user wants production-ready):
+| Priority | Task | Status |
+|----------|------|--------|
+| 1 | Hours Reports with email | ✅ Done |
+| 2 | Financial Dashboard | ✅ Done |
+| 3 | Hours Reminders workflow | 📋 Next |
+| 4 | Employee Portal | 📋 Pending |
+| 5 | PDF export | 📋 Pending |
+| 6 | End-to-end testing | 📋 Pending |
 
 ---
 
@@ -100,35 +128,35 @@ Implement Phase 2 of the email automation system - Hours Reports page for genera
 
 ---
 
-I'm continuing work on the Email Automation System for Simplicate Automations.
+I'm continuing work on the Simplicate Automations production-readiness sprint.
 
-**Read these files first**:
-- `SESSION.md` (detailed session context)
-- `CLAUDE.md` (project overview)
+Read these files first:
+- SESSION.md (detailed session context)
+- CLAUDE.md (project overview)
 
-**Current Status**: Phase 0 + Phase 1 complete - all deployed
+Current Status: Hours Reports + Financial Dashboard complete and deployed
 
-**Just Completed**:
-- Sent Emails page (`/admin/email/sent`) with real data from DB
-- Document Requests page (`/admin/email/documents`) with real data + approve/reject
-- Added `getAllSentEmails`, `getAllSentEmailStats`, `getAllDocumentRequests`, `getAllDocumentRequestStats` to projectEmails router
+Just Completed:
+- Hours Reports page with working email send button
+- Financial Dashboard with revenue/cost/margin tracking by project and employee
+- Removed sync buttons from Hours/Invoices pages (centralized to Settings)
 
-**Next Steps** (Phase 2 - Hours Reports):
-1. Create hours report data aggregator (fetches hours + km + expenses for employee/period)
-2. Add hours report router with procedures for generating reports
-3. Build Hours Reports page with employee/period/project selection
-4. Add HOURS_REPORT email template type
+Next Steps (15-day production roadmap):
+1. Implement Hours Reminders workflow (automated reminders for employees to submit hours)
+2. Build Employee Self-Service Portal (view own hours, upload documents)
+3. Add PDF export to hours reports
+4. Test contract reminder workflow end-to-end
 
-**Key Files**:
-- `src/server/api/routers/projectEmails.ts` - Email/document endpoints
-- `src/app/admin/email/sent/page.tsx` - Sent emails with real data
-- `src/app/admin/email/documents/page.tsx` - Document requests with real data
-- `src/app/admin/email/hours-reports/page.tsx` - Stub, needs implementation
+Key Files:
+- src/server/api/routers/hoursReport.ts - Hours report + email sending
+- src/server/api/routers/financials.ts - Financial dashboard data
+- src/app/admin/email/hours-reports/page.tsx - Hours reports UI
+- src/app/admin/financials/page.tsx - Financial dashboard UI
 
-**URLs**:
+URLs:
 - Production: https://simplicate-automations.vercel.app/
-- Sent Emails: https://simplicate-automations.vercel.app/admin/email/sent
-- Documents: https://simplicate-automations.vercel.app/admin/email/documents
+- Hours Reports: https://simplicate-automations.vercel.app/admin/email/hours-reports
+- Financials: https://simplicate-automations.vercel.app/admin/financials
 
 ---
 
@@ -136,37 +164,35 @@ I'm continuing work on the Email Automation System for Simplicate Automations.
 
 ## Previous Session Notes
 
+**Session: November 28, 2025, 10:30 AM - Production Sprint**
+- Implemented Hours Reports email sending functionality
+- Built Financial Dashboard with revenue/cost/margin tracking
+- Removed sync buttons from Hours and Invoices pages
+- Added HOURS_REPORT to EmailTemplateType enum
+
+**Session: November 27, 2025, 6:15 PM - Hours Reports Page**
+- Created hoursReport router with data aggregation
+- Built Hours Reports page with preview (send button disabled)
+- Removed sync buttons per user request
+
 **Session: November 27, 2025, 5:45 PM - Email Automation Phase 1**
 - Added getAllSentEmails and getAllDocumentRequests router procedures
 - Implemented Sent Emails page with real data, stats, filtering
 - Implemented Document Requests page with real data, approve/reject actions
-- Fixed TypeScript errors (EXPIRED status, sonner dependency)
 
 **Session: November 27, 2025, 4:15 PM - Email Automation Phase 0**
 - Fixed navigation: added expandable Automation section
 - Added syncProjectMembers to fix "Stuur Email" showing no members
-- Created stub pages for email management
 
 **Session: November 27, 2025, 2:30 PM - Email Automation MVP**
-- Built complete email automation system
-- Templates in DB with admin UI
+- Built complete email automation system with templates
 - Upload portal with Vercel Blob
 - Dutch contract reminder template
-- Added "Stuur Email" button on project page
-
-**Session: November 27, 2025, 11:30 AM - Hours Page UX**
-- Fixed "All months" showing current month only
-- Added Select All to MultiSelect
-- Changed "Hours Selected" to "Total Hours"
-
-**Session: November 27, 2025, 10:45 AM - Phase 3 Complete**
-- Discovered cost rates in /hrm/timetable endpoint
-- Updated syncEmployees() and syncHours() with financial calculations
 
 ---
 
-**Session Complexity**: Standard (4 files modified)
+**Session Complexity**: Complex (10+ files modified)
 **Build Status**: Typecheck passes
-**Deployment Status**: Deployed to Vercel
+**Deployment Status**: Deployed to Vercel (auto-deploy from GitHub push)
 
 ---

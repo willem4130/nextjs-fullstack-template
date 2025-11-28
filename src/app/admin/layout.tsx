@@ -21,6 +21,7 @@ import {
   Send,
   FileUp,
   ClipboardList,
+  Bell,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -119,6 +120,11 @@ const automationSection: NavSection = {
       title: 'Hours Reports',
       href: '/admin/email/hours-reports',
       icon: ClipboardList,
+    },
+    {
+      title: 'Hours Reminders',
+      href: '/admin/email/hours-reminders',
+      icon: Bell,
     },
   ],
 }

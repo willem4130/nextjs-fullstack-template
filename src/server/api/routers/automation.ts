@@ -220,4 +220,162 @@ export const automationRouter = createTRPCRouter({
 
       return { id: item.id, message: 'Test item added to queue' }
     }),
+
+  // Trigger hours reminders manually
+  triggerHoursReminders: publicProcedure
+    .input(
+      z.object({
+        period: z.enum(['current', 'previous']).default('previous'),
+        projectId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Add to workflow queue
+      const item = await ctx.db.workflowQueue.create({
+        data: {
+          workflowType: 'HOURS_REMINDER',
+          projectId: input.projectId || null,
+          payload: {
+            period: input.period,
+            triggeredBy: 'manual',
+            triggeredAt: new Date().toISOString(),
+          },
+          status: 'PENDING',
+          scheduledFor: new Date(),
+        },
+      })
+
+      return {
+        success: true,
+        queueItemId: item.id,
+        message: `Hours reminder queued for ${input.period} month`,
+      }
+    }),
+
+  // Get hours reminder preview (who would receive reminders)
+  getHoursReminderPreview: publicProcedure
+    .input(
+      z.object({
+        period: z.enum(['current', 'previous']).default('previous'),
+        projectId: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { startOfMonth, endOfMonth, subMonths, format } = await import('date-fns')
+
+      const now = new Date()
+      const periodDate = input.period === 'previous' ? subMonths(now, 1) : now
+      const periodStart = startOfMonth(periodDate)
+      const periodEnd = endOfMonth(periodDate)
+      const periodLabel = format(periodDate, 'MMMM yyyy')
+
+      // Get active project members
+      const whereClause: any = {
+        leftAt: null,
+        user: {
+          email: { not: null },
+        },
+      }
+
+      if (input.projectId) {
+        whereClause.projectId = input.projectId
+      }
+
+      const projectMembers = await ctx.db.projectMember.findMany({
+        where: whereClause,
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      })
+
+      // Only include members from active projects
+      const activeMembers = projectMembers.filter((m) => m.project.status === 'ACTIVE')
+
+      // Get unique users
+      const userMap = new Map<
+        string,
+        {
+          userId: string
+          userName: string | null
+          userEmail: string
+          projects: Array<{ id: string; name: string }>
+        }
+      >()
+
+      for (const member of activeMembers) {
+        if (!member.user.email) continue
+
+        const existing = userMap.get(member.userId)
+        if (existing) {
+          existing.projects.push({ id: member.project.id, name: member.project.name })
+        } else {
+          userMap.set(member.userId, {
+            userId: member.userId,
+            userName: member.user.name,
+            userEmail: member.user.email,
+            projects: [{ id: member.project.id, name: member.project.name }],
+          })
+        }
+      }
+
+      // Check hours for each user
+      const usersWithStatus: Array<{
+        userId: string
+        userName: string | null
+        userEmail: string
+        projects: Array<{ id: string; name: string }>
+        hoursLogged: number
+        needsReminder: boolean
+      }> = []
+
+      for (const [userId, userData] of userMap) {
+        const hoursAgg = await ctx.db.hoursEntry.aggregate({
+          where: {
+            userId,
+            date: {
+              gte: periodStart,
+              lte: periodEnd,
+            },
+          },
+          _sum: { hours: true },
+        })
+
+        const hoursLogged = hoursAgg._sum.hours || 0
+
+        usersWithStatus.push({
+          ...userData,
+          hoursLogged,
+          needsReminder: hoursLogged < 1,
+        })
+      }
+
+      const needingReminder = usersWithStatus.filter((u) => u.needsReminder)
+      const submittedHours = usersWithStatus.filter((u) => !u.needsReminder)
+
+      return {
+        period: periodLabel,
+        totalUsers: usersWithStatus.length,
+        needingReminder: needingReminder.length,
+        submittedHours: submittedHours.length,
+        users: usersWithStatus.sort((a, b) => {
+          // Show users needing reminder first
+          if (a.needsReminder && !b.needsReminder) return -1
+          if (!a.needsReminder && b.needsReminder) return 1
+          return (a.userName || a.userEmail).localeCompare(b.userName || b.userEmail)
+        }),
+      }
+    }),
 })
