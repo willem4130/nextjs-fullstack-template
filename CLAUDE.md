@@ -168,3 +168,30 @@ offset=0&limit=100       // Pagination
 - One router per domain
 - Commit after each working feature
 - Deploy to verify production works
+
+## Testing Rules
+
+- **ONLY use willem@scex.nl for email testing** - Never send test emails to other addresses
+- Willem's user ID: `cmiigv6fp000cjp045dym3457`
+- Test email command:
+  ```bash
+  curl -s -X POST "https://simplicate-automations.vercel.app/api/trpc/hoursReport.sendReport" \
+    -H "Content-Type: application/json" \
+    -d '{"json":{"employeeId":"cmiigv6fp000cjp045dym3457","month":"2025-11"}}'
+  ```
+
+## Environment Variables (Production)
+
+Required in Vercel:
+- `DATABASE_URL` - Neon PostgreSQL connection string
+- `RESEND_API_KEY` - Email sending (from resend.com)
+- `EMAIL_FROM` - Sender email address
+- `SIMPLICATE_API_KEY` / `SIMPLICATE_API_SECRET` / `SIMPLICATE_DOMAIN` - Simplicate API access
+
+## Useful URLs
+
+- **Production**: https://simplicate-automations.vercel.app/
+- **Help (Dutch)**: https://simplicate-automations.vercel.app/admin/help
+- **Hours Reports**: https://simplicate-automations.vercel.app/admin/email/hours-reports
+- **Sent Emails**: https://simplicate-automations.vercel.app/admin/email/sent
+- **Settings/Sync**: https://simplicate-automations.vercel.app/admin/settings
