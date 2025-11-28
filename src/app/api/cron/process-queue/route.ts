@@ -346,7 +346,7 @@ async function processHoursReminder(item: {
   const whereClause: any = {
     leftAt: null, // Active members only
     user: {
-      email: { not: null },
+      NOT: { email: null },
     },
   };
 

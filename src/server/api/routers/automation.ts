@@ -273,7 +273,7 @@ export const automationRouter = createTRPCRouter({
       const whereClause: any = {
         leftAt: null,
         user: {
-          email: { not: null },
+          NOT: { email: null },
         },
       }
 
