@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc'
 import { getSimplicateClient } from '@/lib/simplicate/client'
+import { batchResolveRates } from '@/lib/rates/resolver'
 
 export const syncRouter = createTRPCRouter({
   // Sync projects from Simplicate to local database
@@ -519,6 +520,21 @@ export const syncRouter = createTRPCRouter({
         financialsCalculated: 0,
       }
 
+      // Prepare entries for batch rate resolution
+      const entriesToResolve: Array<{
+        id: string
+        userId: string
+        projectId: string
+        projectServiceId: string | null
+        hours: number
+        simplicateTariff: number | null
+        dateStr: string
+        date: Date
+        description: string | null
+        billable: boolean
+        status: 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'INVOICED'
+      }> = []
+
       for (const hours of simplicateHours) {
         try {
           // Find the project by Simplicate ID
@@ -565,56 +581,68 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
-          // Get rates - salesRate from Simplicate tariff, costRate from user
-          const salesRate = hours.tariff || hours.hourly_rate || null
-          const costRate = user.costRateOverride ?? user.defaultCostRate ?? null
+          // Get Simplicate tariff as fallback
+          const simplicateTariff = hours.tariff || hours.hourly_rate || null
 
-          // Calculate financial values
-          let revenue: number | null = null
-          let cost: number | null = null
-          let margin: number | null = null
-          let rateSource: string | null = null
+          // Add to batch resolution list
+          entriesToResolve.push({
+            id: hours.id,
+            userId: user.id,
+            projectId: project.id,
+            projectServiceId,
+            hours: hours.hours,
+            simplicateTariff,
+            dateStr,
+            date: parsedDate,
+            description: hours.description || null,
+            billable: hours.billable ?? true,
+            status: mapHoursStatus(hours.status),
+          })
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to prepare hours ${hours.id}: ${errorMessage}`)
+        }
+      }
 
-          if (salesRate !== null && hours.hours > 0) {
-            revenue = hours.hours * salesRate
-            rateSource = 'simplicate' // Sales rate comes from Simplicate hours entry
+      // Batch resolve rates for all entries
+      const resolvedRates = await batchResolveRates(ctx.db, entriesToResolve)
+
+      // Now create/update hours entries with resolved rates
+      for (const entry of entriesToResolve) {
+        try {
+          const rates = resolvedRates.get(entry.id)
+
+          if (!rates) {
+            results.skipped++
+            continue
           }
 
-          if (costRate !== null && hours.hours > 0) {
-            cost = hours.hours * costRate
-            if (user.costRateOverride) {
-              rateSource = 'user-override'
-            } else if (user.defaultCostRate) {
-              rateSource = rateSource ? rateSource : 'user-default'
-            }
-          }
-
-          if (revenue !== null && cost !== null) {
-            margin = revenue - cost
+          // Track if financials were calculated
+          if (rates.revenue !== null && rates.cost !== null) {
             results.financialsCalculated++
           }
 
           const hoursData = {
-            projectId: project.id,
-            userId: user.id,
-            projectServiceId,
-            simplicateHoursId: hours.id,
-            hours: hours.hours,
-            date: parsedDate,
-            description: hours.description || null,
-            salesRate,
-            costRate,
-            revenue,
-            cost,
-            margin,
-            rateSource,
-            billable: hours.billable ?? true,
-            status: mapHoursStatus(hours.status),
+            projectId: entry.projectId,
+            userId: entry.userId,
+            projectServiceId: entry.projectServiceId,
+            simplicateHoursId: entry.id,
+            hours: entry.hours,
+            date: entry.date,
+            description: entry.description,
+            salesRate: rates.salesRate,
+            costRate: rates.costRate,
+            revenue: rates.revenue,
+            cost: rates.cost,
+            margin: rates.margin,
+            rateSource: rates.salesRateSource, // Use sales rate source as primary
+            billable: entry.billable,
+            status: entry.status,
           }
 
           // Upsert hours entry
           const existingEntry = await ctx.db.hoursEntry.findUnique({
-            where: { simplicateHoursId: hours.id },
+            where: { simplicateHoursId: entry.id },
           })
 
           if (existingEntry) {
@@ -631,7 +659,7 @@ export const syncRouter = createTRPCRouter({
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          results.errors.push(`Failed to sync hours ${hours.id}: ${errorMessage}`)
+          results.errors.push(`Failed to sync hours ${entry.id}: ${errorMessage}`)
         }
       }
 
