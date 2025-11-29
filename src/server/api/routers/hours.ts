@@ -256,8 +256,10 @@ export const hoursRouter = createTRPCRouter({
         projectId: z.string().optional(), // Legacy single project support
         employeeIds: z.array(z.string()).optional(), // Multiple employees
         employeeId: z.string().optional(), // Legacy single employee support
-        sortBy: z.enum(['client', 'project', 'hours', 'budget']).default('client'),
+        sortBy: z.enum(['client', 'project', 'hours', 'budget', 'revenue', 'margin']).default('client'),
         sortOrder: z.enum(['asc', 'desc']).default('asc'),
+        billableOnly: z.boolean().optional(),
+        marginThreshold: z.enum(['all', 'healthy', 'warning', 'critical']).optional(),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -301,6 +303,7 @@ export const hoursRouter = createTRPCRouter({
 
       if (selectedProjects.length > 0) hoursWhere.projectId = { in: selectedProjects }
       if (selectedEmployees.length > 0) hoursWhere.userId = { in: selectedEmployees }
+      if (input?.billableOnly) hoursWhere.billable = true
 
       // Get all hours for the month grouped by project and service
       const hours = await ctx.db.hoursEntry.findMany({
@@ -340,10 +343,20 @@ export const hoursRouter = createTRPCRouter({
             employee: { id: string; name: string | null; email: string };
             hoursThisMonth: number;
             entries: number;
+            totalRevenue: number;
+            totalCost: number;
+            totalMargin: number;
+            rateSource: string | null;
           }>;
           hoursThisMonth: number;
+          totalRevenue: number;
+          totalCost: number;
+          totalMargin: number;
         }>;
         totalHoursThisMonth: number;
+        totalRevenue: number;
+        totalCost: number;
+        totalMargin: number;
       }>()
 
       for (const entry of hours) {
@@ -353,10 +366,16 @@ export const hoursRouter = createTRPCRouter({
             project: entry.project,
             services: new Map(),
             totalHoursThisMonth: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalMargin: 0,
           })
         }
         const projectData = projectMap.get(projectId)!
         projectData.totalHoursThisMonth += entry.hours
+        projectData.totalRevenue += entry.revenue || 0
+        projectData.totalCost += entry.cost || 0
+        projectData.totalMargin += entry.margin || 0
 
         const serviceId = entry.projectService?.id || 'no-service'
         if (!projectData.services.has(serviceId)) {
@@ -364,10 +383,16 @@ export const hoursRouter = createTRPCRouter({
             service: entry.projectService || { id: 'no-service', name: 'No dienst', budgetHours: null, usedHours: 0 },
             employees: new Map(),
             hoursThisMonth: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalMargin: 0,
           })
         }
         const serviceData = projectData.services.get(serviceId)!
         serviceData.hoursThisMonth += entry.hours
+        serviceData.totalRevenue += entry.revenue || 0
+        serviceData.totalCost += entry.cost || 0
+        serviceData.totalMargin += entry.margin || 0
 
         const employeeId = entry.user.id
         if (!serviceData.employees.has(employeeId)) {
@@ -375,11 +400,21 @@ export const hoursRouter = createTRPCRouter({
             employee: entry.user,
             hoursThisMonth: 0,
             entries: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalMargin: 0,
+            rateSource: null,
           })
         }
         const employeeData = serviceData.employees.get(employeeId)!
         employeeData.hoursThisMonth += entry.hours
         employeeData.entries += 1
+        employeeData.totalRevenue += entry.revenue || 0
+        employeeData.totalCost += entry.cost || 0
+        employeeData.totalMargin += entry.margin || 0
+        if (entry.rateSource) {
+          employeeData.rateSource = entry.rateSource
+        }
       }
 
       // Convert to array and sort
@@ -394,9 +429,27 @@ export const hoursRouter = createTRPCRouter({
           monthPercentageOfBudget: s.service.budgetHours && s.service.budgetHours > 0
             ? Math.round((s.hoursThisMonth / s.service.budgetHours) * 100)
             : null,
-          employees: Array.from(s.employees.values()),
+          totalRevenue: s.totalRevenue,
+          totalCost: s.totalCost,
+          totalMargin: s.totalMargin,
+          marginPercentage: s.totalRevenue > 0
+            ? (s.totalMargin / s.totalRevenue) * 100
+            : 0,
+          employees: Array.from(s.employees.values()).map(e => ({
+            ...e,
+            avgRate: e.hoursThisMonth > 0 ? e.totalRevenue / e.hoursThisMonth : 0,
+            marginPercentage: e.totalRevenue > 0
+              ? (e.totalMargin / e.totalRevenue) * 100
+              : 0,
+          })),
         })),
         totalHoursThisMonth: p.totalHoursThisMonth,
+        totalRevenue: p.totalRevenue,
+        totalCost: p.totalCost,
+        totalMargin: p.totalMargin,
+        marginPercentage: p.totalRevenue > 0
+          ? (p.totalMargin / p.totalRevenue) * 100
+          : 0,
       }))
 
       // Sort projects
@@ -419,18 +472,38 @@ export const hoursRouter = createTRPCRouter({
             const bMax = Math.max(...b.services.map(s => s.budgetPercentage || 0))
             cmp = aMax - bMax
             break
+          case 'revenue':
+            cmp = a.totalRevenue - b.totalRevenue
+            break
+          case 'margin':
+            cmp = a.totalMargin - b.totalMargin
+            break
         }
         return sortOrder === 'desc' ? -cmp : cmp
       })
 
+      // Apply margin threshold filter
+      let filteredProjects = projects
+      if (input?.marginThreshold && input.marginThreshold !== 'all') {
+        filteredProjects = projects.filter(p => {
+          const margin = p.marginPercentage
+          switch (input.marginThreshold) {
+            case 'healthy': return margin >= 40
+            case 'warning': return margin >= 25 && margin < 40
+            case 'critical': return margin < 25
+            default: return true
+          }
+        })
+      }
+
       return {
         months: selectedMonths,
         month: selectedMonths[0] || '', // Legacy support
-        projects,
+        projects: filteredProjects,
         totals: {
           hoursThisMonth: hours.reduce((sum, h) => sum + h.hours, 0),
           entriesThisMonth: hours.length,
-          projectsWithHours: projects.length,
+          projectsWithHours: filteredProjects.length,
         },
       }
     }),

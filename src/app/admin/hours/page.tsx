@@ -90,13 +90,52 @@ function getBudgetStatus(percentage: number | null) {
   return { label: 'On track', variant: 'outline' as const, color: 'text-green-600' }
 }
 
+// Format currency
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+// Get margin color class
+function getMarginColor(marginPercent: number): string {
+  if (marginPercent >= 40) return 'text-green-600'
+  if (marginPercent >= 25) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
+// Get margin badge variant
+function getMarginBadgeVariant(marginPercent: number): 'default' | 'secondary' | 'destructive' {
+  if (marginPercent >= 40) return 'default'
+  if (marginPercent >= 25) return 'secondary'
+  return 'destructive'
+}
+
+// Get rate source label
+function getRateSourceLabel(source: string | null): string {
+  if (!source) return 'Unknown'
+  const labels: Record<string, string> = {
+    'service-employee': 'Service Rate',
+    'project-member': 'Project Rate',
+    'user-override': 'User Override',
+    'user-default': 'User Default',
+    'simplicate': 'Simplicate'
+  }
+  return labels[source] || source
+}
+
 // Types for filter state
 interface FilterState {
   months: string[]
   projects: string[]
   employees: string[]
-  sortBy: 'client' | 'project' | 'hours' | 'budget'
+  sortBy: 'client' | 'project' | 'hours' | 'budget' | 'revenue' | 'margin'
   sortOrder: 'asc' | 'desc'
+  billableOnly: boolean
+  marginThreshold: 'all' | 'healthy' | 'warning' | 'critical'
 }
 
 const defaultFilters: FilterState = {
@@ -105,6 +144,8 @@ const defaultFilters: FilterState = {
   employees: [],
   sortBy: 'client',
   sortOrder: 'asc',
+  billableOnly: false,
+  marginThreshold: 'all',
 }
 
 // LocalStorage key
@@ -125,6 +166,8 @@ export default function HoursPage() {
     employeeIds: filters.employees.length > 0 ? filters.employees : undefined,
     sortBy: filters.sortBy,
     sortOrder: filters.sortOrder,
+    billableOnly: filters.billableOnly,
+    marginThreshold: filters.marginThreshold,
   })
 
   const { data: projects } = api.hours.getProjectsForFilter.useQuery()
@@ -149,6 +192,8 @@ export default function HoursPage() {
         employees: savedFilters.employees || [],
         sortBy: savedFilters.sortBy || 'client',
         sortOrder: savedFilters.sortOrder || 'asc',
+        billableOnly: savedFilters.billableOnly || false,
+        marginThreshold: savedFilters.marginThreshold || 'all',
       })
     }
   }, [defaultPreset])
@@ -234,6 +279,8 @@ export default function HoursPage() {
       employees: savedFilters.employees || [],
       sortBy: savedFilters.sortBy || 'client',
       sortOrder: savedFilters.sortOrder || 'asc',
+      billableOnly: savedFilters.billableOnly || false,
+      marginThreshold: savedFilters.marginThreshold || 'all',
     })
   }
 
@@ -290,7 +337,9 @@ export default function HoursPage() {
     filters.projects.length > 0 ||
     filters.employees.length > 0 ||
     filters.sortBy !== 'client' ||
-    filters.sortOrder !== 'asc'
+    filters.sortOrder !== 'asc' ||
+    filters.billableOnly ||
+    filters.marginThreshold !== 'all'
 
   // Format filter summary for preset display
   const formatFilterSummary = (presetFilters: unknown): string => {
@@ -384,6 +433,42 @@ export default function HoursPage() {
               />
             </div>
 
+            {/* Billable filter */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Type</label>
+              <div className="flex items-center space-x-2 h-10 px-3 py-2 border rounded-md bg-background">
+                <input
+                  type="checkbox"
+                  id="billable-only"
+                  checked={filters.billableOnly}
+                  onChange={(e) => setFilters(f => ({ ...f, billableOnly: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="billable-only" className="text-sm cursor-pointer">
+                  Billable only
+                </Label>
+              </div>
+            </div>
+
+            {/* Margin threshold filter */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Margin</label>
+              <Select
+                value={filters.marginThreshold}
+                onValueChange={(v) => setFilters(f => ({ ...f, marginThreshold: v as FilterState['marginThreshold'] }))}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All margins</SelectItem>
+                  <SelectItem value="healthy">Healthy (≥40%)</SelectItem>
+                  <SelectItem value="warning">Warning (25-40%)</SelectItem>
+                  <SelectItem value="critical">Critical (&lt;25%)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Sort by */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-muted-foreground">Sort by</label>
@@ -400,6 +485,8 @@ export default function HoursPage() {
                   <SelectItem value="project">Project</SelectItem>
                   <SelectItem value="hours">Hours</SelectItem>
                   <SelectItem value="budget">Budget %</SelectItem>
+                  <SelectItem value="revenue">Revenue</SelectItem>
+                  <SelectItem value="margin">Margin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -722,6 +809,13 @@ export default function HoursPage() {
                             <p className="font-semibold">{project.totalHoursThisMonth.toFixed(1)}h</p>
                             <p className="text-xs text-muted-foreground">selected period</p>
                           </div>
+                          <div className="text-right">
+                            <p className="font-semibold">{formatCurrency(project.totalRevenue || 0)}</p>
+                            <p className="text-xs text-muted-foreground">revenue</p>
+                          </div>
+                          <Badge variant={getMarginBadgeVariant(project.marginPercentage || 0)} className="min-w-[70px] justify-center">
+                            {(project.marginPercentage || 0).toFixed(0)}%
+                          </Badge>
                           {(() => {
                             const maxBudget = Math.max(...project.services.map(s => s.budgetPercentage || 0))
                             const status = getBudgetStatus(maxBudget > 0 ? maxBudget : null)
@@ -751,6 +845,13 @@ export default function HoursPage() {
                                     <span className="font-medium">{service.hoursThisMonth.toFixed(1)}h</span>
                                     <span className="text-muted-foreground"> selected</span>
                                   </span>
+                                  <span className="text-sm">
+                                    <span className="font-medium">{formatCurrency(service.totalRevenue || 0)}</span>
+                                    <span className="text-muted-foreground"> revenue</span>
+                                  </span>
+                                  <Badge variant={getMarginBadgeVariant(service.marginPercentage || 0)}>
+                                    {(service.marginPercentage || 0).toFixed(0)}% margin
+                                  </Badge>
                                   <Badge variant={status.variant}>{status.label}</Badge>
                                 </div>
                               </div>
@@ -781,6 +882,11 @@ export default function HoursPage() {
                                     <TableRow>
                                       <TableHead>Employee</TableHead>
                                       <TableHead className="text-right">Hours</TableHead>
+                                      <TableHead className="text-right">Rate</TableHead>
+                                      <TableHead className="text-right">Revenue</TableHead>
+                                      <TableHead className="text-right">Cost</TableHead>
+                                      <TableHead className="text-right">Margin</TableHead>
+                                      <TableHead className="text-right">Margin %</TableHead>
                                       <TableHead className="text-right">Entries</TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -795,6 +901,30 @@ export default function HoursPage() {
                                         </TableCell>
                                         <TableCell className="text-right font-medium">
                                           {emp.hoursThisMonth.toFixed(1)}h
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                          <div className="flex flex-col items-end">
+                                            <span>€{emp.avgRate?.toFixed(0) || '-'}</span>
+                                            {emp.rateSource && (
+                                              <span className="text-xs text-muted-foreground">
+                                                {getRateSourceLabel(emp.rateSource)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                          {formatCurrency(emp.totalRevenue || 0)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                          {formatCurrency(emp.totalCost || 0)}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                          {formatCurrency(emp.totalMargin || 0)}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <Badge variant={getMarginBadgeVariant(emp.marginPercentage || 0)}>
+                                            {(emp.marginPercentage || 0).toFixed(0)}%
+                                          </Badge>
                                         </TableCell>
                                         <TableCell className="text-right text-muted-foreground">
                                           {emp.entries}
