@@ -54,6 +54,7 @@ export const usersRouter = createTRPCRouter({
               select: {
                 contracts: true,
                 hoursEntries: true,
+                expenses: true,
               },
             },
           },
@@ -121,6 +122,24 @@ export const usersRouter = createTRPCRouter({
               hours: true,
               date: true,
               status: true,
+            },
+            take: 10,
+            orderBy: { date: 'desc' },
+          },
+          expenses: {
+            where: { category: 'KILOMETERS' },
+            select: {
+              id: true,
+              kilometers: true,
+              amount: true,
+              date: true,
+              description: true,
+              project: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
             take: 10,
             orderBy: { date: 'desc' },

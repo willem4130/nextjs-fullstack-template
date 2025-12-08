@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   FolderKanban,
   Activity,
-  AlertCircle
+  AlertCircle,
+  Car
 } from 'lucide-react'
 import { api } from '@/trpc/react'
 import Link from 'next/link'
@@ -28,8 +29,8 @@ export default function DashboardPage() {
             Loading dashboard data...
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {[1, 2, 3, 4, 5].map((i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <div className="h-4 w-24 bg-muted animate-pulse rounded" />
@@ -94,6 +95,15 @@ export default function DashboardPage() {
       icon: DollarSign,
       href: '/admin/invoices',
     },
+    {
+      title: 'Total Mileage',
+      value: `${overview.mileage.totalKilometers.toFixed(0)} km`,
+      subtitle: `€${overview.mileage.totalCost.toFixed(2)} cost`,
+      change: `${overview.mileage.totalEntries} entries`,
+      trend: 'neutral' as const,
+      icon: Car,
+      href: '/admin/mileage',
+    },
   ]
 
   const automationStats = [
@@ -130,7 +140,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {stats.map((stat) => {
           const Icon = stat.icon
           return (

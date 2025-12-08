@@ -8,6 +8,7 @@ export const dashboardRouter = createTRPCRouter({
       contractStats,
       hoursStats,
       invoiceStats,
+      mileageStats,
       automationStats,
       recentProjects,
       recentAutomations,
@@ -35,6 +36,14 @@ export const dashboardRouter = createTRPCRouter({
         ctx.db.invoice.aggregate({ _sum: { amount: true } }),
         ctx.db.invoice.count({ where: { status: 'DRAFT' } }),
         ctx.db.invoice.count({ where: { status: 'PAID' } }),
+      ]),
+      // Mileage stats
+      Promise.all([
+        ctx.db.expense.aggregate({
+          where: { category: 'KILOMETERS' },
+          _sum: { kilometers: true, amount: true }
+        }),
+        ctx.db.expense.count({ where: { category: 'KILOMETERS' } }),
       ]),
       // Automation stats
       Promise.all([
@@ -74,6 +83,7 @@ export const dashboardRouter = createTRPCRouter({
     const [totalContracts, pendingContracts, signedContracts] = contractStats
     const [totalHoursAgg, pendingHours, approvedHours] = hoursStats
     const [totalAmountAgg, draftInvoices, paidInvoices] = invoiceStats
+    const [mileageAgg, totalMileageEntries] = mileageStats
     const [totalAutomations, successAutomations, failedAutomations] = automationStats
 
     return {
@@ -99,6 +109,11 @@ export const dashboardRouter = createTRPCRouter({
         draft: draftInvoices,
         paid: paidInvoices,
         pending: draftInvoices, // pending = draft invoices
+      },
+      mileage: {
+        totalKilometers: mileageAgg._sum.kilometers ?? 0,
+        totalCost: mileageAgg._sum.amount ?? 0,
+        totalEntries: totalMileageEntries,
       },
       automation: {
         total: totalAutomations,

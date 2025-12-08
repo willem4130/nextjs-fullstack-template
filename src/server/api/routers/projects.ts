@@ -43,12 +43,21 @@ export const projectsRouter = createTRPCRouter({
                 status: true,
               },
             },
+            expenses: {
+              where: { category: 'KILOMETERS' },
+              select: {
+                id: true,
+                kilometers: true,
+                amount: true,
+              },
+            },
             _count: {
               select: {
                 contracts: true,
                 hoursEntries: true,
                 invoices: true,
                 automationLogs: true,
+                expenses: true,
               },
             },
           },
@@ -100,6 +109,20 @@ export const projectsRouter = createTRPCRouter({
             },
           },
           invoices: true,
+          expenses: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: {
+              date: 'desc',
+            },
+          },
           automationLogs: {
             orderBy: {
               startedAt: 'desc',
@@ -128,6 +151,7 @@ export const projectsRouter = createTRPCRouter({
       approvedHours,
       totalInvoices,
       paidInvoices,
+      mileageStats,
     ] = await Promise.all([
       ctx.db.project.count(),
       ctx.db.project.count({ where: { status: 'ACTIVE' } }),
@@ -141,6 +165,10 @@ export const projectsRouter = createTRPCRouter({
       }),
       ctx.db.invoice.count(),
       ctx.db.invoice.count({ where: { status: 'PAID' } }),
+      ctx.db.expense.aggregate({
+        where: { category: 'KILOMETERS' },
+        _sum: { kilometers: true, amount: true },
+      }),
     ])
 
     return {
@@ -162,6 +190,10 @@ export const projectsRouter = createTRPCRouter({
         total: totalInvoices,
         paid: paidInvoices,
         pending: totalInvoices - paidInvoices,
+      },
+      mileage: {
+        totalKilometers: mileageStats._sum.kilometers ?? 0,
+        totalCost: mileageStats._sum.amount ?? 0,
       },
     }
   }),

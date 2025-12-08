@@ -1133,35 +1133,49 @@ export const syncRouter = createTRPCRouter({
 
   // Get sync status
   getSyncStatus: publicProcedure.query(async ({ ctx }) => {
-    const lastSyncedProject = await ctx.db.project.findFirst({
-      orderBy: { lastSyncedAt: 'desc' },
-      select: { lastSyncedAt: true },
-    })
+    try {
+      const lastSyncedProject = await ctx.db.project.findFirst({
+        orderBy: { lastSyncedAt: 'desc' },
+        select: { lastSyncedAt: true },
+      })
 
-    const totalProjects = await ctx.db.project.count()
-    const totalUsers = await ctx.db.user.count()
-    const syncedUsers = await ctx.db.user.count({
-      where: { simplicateEmployeeId: { not: null } },
-    })
+      const totalProjects = await ctx.db.project.count()
+      const totalUsers = await ctx.db.user.count()
+      const syncedUsers = await ctx.db.user.count({
+        where: { simplicateEmployeeId: { not: null } },
+      })
 
-    const totalMileage = await ctx.db.expense.count({
-      where: { category: 'KILOMETERS' },
-    })
+      const totalMileage = await ctx.db.expense.count({
+        where: { category: 'KILOMETERS' },
+      })
 
-    const appSettings = await ctx.db.appSettings.findFirst()
+      // Ensure AppSettings record exists
+      let appSettings = await ctx.db.appSettings.findFirst()
+      if (!appSettings) {
+        appSettings = await ctx.db.appSettings.create({
+          data: {
+            siteName: 'Simplicate Automations',
+            kmRate: 0.23,
+          },
+        })
+      }
 
-    return {
-      lastSyncedAt: lastSyncedProject?.lastSyncedAt || null,
-      totalProjects,
-      totalUsers,
-      syncedUsers,
-      totalMileage,
-      hasBeenSynced: totalProjects > 0,
-      lastProjectsSyncAt: appSettings?.lastProjectsSyncAt || null,
-      lastEmployeesSyncAt: appSettings?.lastEmployeesSyncAt || null,
-      lastHoursSyncAt: appSettings?.lastHoursSyncAt || null,
-      lastInvoicesSyncAt: appSettings?.lastInvoicesSyncAt || null,
-      lastMileageSyncAt: appSettings?.lastMileageSyncAt || null,
+      return {
+        lastSyncedAt: lastSyncedProject?.lastSyncedAt || null,
+        totalProjects,
+        totalUsers,
+        syncedUsers,
+        totalMileage,
+        hasBeenSynced: totalProjects > 0,
+        lastProjectsSyncAt: appSettings.lastProjectsSyncAt || null,
+        lastEmployeesSyncAt: appSettings.lastEmployeesSyncAt || null,
+        lastHoursSyncAt: appSettings.lastHoursSyncAt || null,
+        lastInvoicesSyncAt: appSettings.lastInvoicesSyncAt || null,
+        lastMileageSyncAt: appSettings.lastMileageSyncAt || null,
+      }
+    } catch (error) {
+      console.error('[getSyncStatus] Error:', error)
+      throw new Error(`Failed to get sync status: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }),
 })
