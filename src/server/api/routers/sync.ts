@@ -832,6 +832,15 @@ export const syncRouter = createTRPCRouter({
         }
       }
 
+      // Update sync timestamp
+      const appSettings = await ctx.db.appSettings.findFirst()
+      if (appSettings) {
+        await ctx.db.appSettings.update({
+          where: { id: appSettings.id },
+          data: { lastMileageSyncAt: new Date() },
+        })
+      }
+
       return {
         success: true,
         totalProcessed: mileageData.length,
@@ -855,6 +864,7 @@ export const syncRouter = createTRPCRouter({
       members: { created: 0, updated: 0, skipped: 0, projectsProcessed: 0, errors: [] as string[] },
       hours: { created: 0, updated: 0, skipped: 0, financialsCalculated: 0, errors: [] as string[] },
       invoices: { created: 0, updated: 0, skipped: 0, errors: [] as string[] },
+      mileage: { created: 0, updated: 0, errors: [] as string[] },
     }
 
     try {
@@ -1020,15 +1030,86 @@ export const syncRouter = createTRPCRouter({
 
       console.log('[SyncAll] Group 2 complete')
 
-      // Group 3: Hours + Invoices (simplified inline)
-      console.log('[SyncAll] Group 3: Syncing hours and invoices...')
+      // Group 3: Mileage (lightweight sync)
+      console.log('[SyncAll] Group 3: Syncing mileage...')
+      try {
+        // Get mileage data from Simplicate
+        const mileageData = await client.getAllMileage()
 
-      // Skip hours and invoices for now - they're complex and can be done separately
-      // This ensures the sync button is fast and lightweight
+        // Get app settings for km rate
+        const settingsForKmRate = await ctx.db.appSettings.findFirst()
+        const kmRate = settingsForKmRate?.kmRate || 0.23
 
-      const totalCreated = results.projects.created + results.employees.created + results.services.created
-      const totalUpdated = results.projects.updated + results.employees.updated + results.services.updated
-      const totalErrors = results.projects.errors.length + results.employees.errors.length + results.services.errors.length
+        for (const mileage of mileageData) {
+          try {
+            // Find the project
+            const project = mileage.project_id ? await ctx.db.project.findUnique({
+              where: { simplicateId: mileage.project_id },
+            }) : null
+
+            // Find the user (employee)
+            const user = await ctx.db.user.findUnique({
+              where: { simplicateEmployeeId: mileage.employee_id },
+            })
+
+            if (!project || !user) {
+              results.mileage.errors.push(`Skipped mileage: missing project or user`)
+              continue
+            }
+
+            const kilometers = mileage.kilometers
+            const cost = kilometers * kmRate
+
+            const expenseData = {
+              projectId: project.id,
+              userId: user.id,
+              simplicateExpenseId: mileage.id,
+              category: 'KILOMETERS' as const,
+              description: mileage.description || null,
+              amount: cost,
+              kilometers,
+              date: new Date(mileage.date),
+              status: 'APPROVED' as const,
+            }
+
+            // Upsert expense
+            const existing = await ctx.db.expense.findUnique({
+              where: { simplicateExpenseId: mileage.id },
+            })
+
+            if (existing) {
+              await ctx.db.expense.update({
+                where: { id: existing.id },
+                data: expenseData,
+              })
+              results.mileage.updated++
+            } else {
+              await ctx.db.expense.create({
+                data: expenseData,
+              })
+              results.mileage.created++
+            }
+          } catch (error) {
+            results.mileage.errors.push(error instanceof Error ? error.message : 'Unknown error')
+          }
+        }
+        // Update sync timestamp
+        const settingsForTimestamp = await ctx.db.appSettings.findFirst()
+        if (settingsForTimestamp) {
+          await ctx.db.appSettings.update({
+            where: { id: settingsForTimestamp.id },
+            data: { lastMileageSyncAt: new Date() },
+          })
+        }
+      } catch (error) {
+        results.mileage.errors.push(error instanceof Error ? error.message : 'Mileage sync failed')
+      }
+
+      console.log('[SyncAll] Group 3 complete')
+
+      const totalCreated = results.projects.created + results.employees.created + results.services.created + results.mileage.created
+      const totalUpdated = results.projects.updated + results.employees.updated + results.services.updated + results.mileage.updated
+      const totalErrors = results.projects.errors.length + results.employees.errors.length + results.services.errors.length + results.mileage.errors.length
       const duration = ((Date.now() - startTime) / 1000).toFixed(1)
 
       console.log('[SyncAll] Complete!', { totalCreated, totalUpdated, totalErrors, duration: `${duration}s` })
@@ -1063,12 +1144,24 @@ export const syncRouter = createTRPCRouter({
       where: { simplicateEmployeeId: { not: null } },
     })
 
+    const totalMileage = await ctx.db.expense.count({
+      where: { category: 'KILOMETERS' },
+    })
+
+    const appSettings = await ctx.db.appSettings.findFirst()
+
     return {
       lastSyncedAt: lastSyncedProject?.lastSyncedAt || null,
       totalProjects,
       totalUsers,
       syncedUsers,
+      totalMileage,
       hasBeenSynced: totalProjects > 0,
+      lastProjectsSyncAt: appSettings?.lastProjectsSyncAt || null,
+      lastEmployeesSyncAt: appSettings?.lastEmployeesSyncAt || null,
+      lastHoursSyncAt: appSettings?.lastHoursSyncAt || null,
+      lastInvoicesSyncAt: appSettings?.lastInvoicesSyncAt || null,
+      lastMileageSyncAt: appSettings?.lastMileageSyncAt || null,
     }
   }),
 })
