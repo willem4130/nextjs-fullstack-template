@@ -1,25 +1,25 @@
 {
-  "name": "simplicate-automations",
+  "name": "supply-chain-simulator",
   "version": "1.0.0",
-  "description": "Production-ready Simplicate automation system for contract distribution, hours reminders, and invoice generation",
+  "description": "Multi-tenant SaaS application for supply chain what-if scenario modeling with non-linear effect curves and financial impact analysis",
   "keywords": [
-    "simplicate",
-    "automation",
-    "workflow",
-    "contracts",
-    "invoicing",
-    "hours-tracking",
+    "supply-chain",
+    "scenario-modeling",
+    "what-if-analysis",
+    "calculations",
+    "saas",
+    "multi-tenant",
     "nextjs",
     "typescript"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/simplicate-automations.git"
+    "url": "https://github.com/willem4130/sc-sim.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/simplicate-automations/issues"
+    "url": "https://github.com/willem4130/sc-sim/issues"
   },
-  "homepage": "https://github.com/yourusername/simplicate-automations#readme",
+  "homepage": "https://github.com/willem4130/sc-sim#readme",
   "author": "Willem van den Berg <willem@scex.nl>",
   "scripts": {
     "dev": "next dev --turbopack",

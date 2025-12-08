@@ -9,8 +9,8 @@ import { Toaster } from '@/components/ui/sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Simplicate Automations',
-  description: 'Production-ready automation system for Simplicate with contract distribution, hours reminders, and invoice generation',
+  title: 'Supply Chain Scenario Simulator',
+  description: 'Multi-tenant SaaS application for supply chain what-if scenario modeling with non-linear effect curves and financial impact analysis',
 }
 
 export default function RootLayout({

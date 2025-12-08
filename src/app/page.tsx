@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowRight, CheckCircle2, FileText, Clock, DollarSign, Bell } from 'lucide-react'
+import { ArrowRight, CheckCircle2, TrendingUp, Boxes, Calculator, BarChart3 } from 'lucide-react'
 
 export default function Home() {
   return (
@@ -10,8 +10,8 @@ export default function Home() {
       <header className="border-b">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary" />
-            <h1 className="text-xl font-semibold">Simplicate Automations</h1>
+            <Boxes className="h-8 w-8 text-primary" />
+            <h1 className="text-xl font-semibold">Supply Chain Simulator</h1>
           </div>
           <Link href="/admin/dashboard">
             <Button>
@@ -26,21 +26,21 @@ export default function Home() {
       <section className="container px-4 py-24">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Automate Your Simplicate Workflows
+            Model Supply Chain Scenarios with Confidence
           </h2>
           <p className="mt-6 text-lg text-muted-foreground">
-            Production-ready automation system for contract distribution, hours reminders, and invoice generation
+            Multi-tenant SaaS for what-if scenario modeling with non-linear effect curves, side-by-side comparison, and financial impact analysis
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
-            <Link href="/admin/dashboard">
+            <Link href="/admin/scenarios">
               <Button size="lg">
-                Get Started
+                Create Scenario
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/admin/workflows">
+            <Link href="/admin/dashboard">
               <Button size="lg" variant="outline">
-                View Workflows
+                View Dashboard
               </Button>
             </Link>
           </div>
@@ -55,25 +55,25 @@ export default function Home() {
             <div className="mt-12 grid gap-6 md:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <FileText className="h-8 w-8 text-purple-600" />
-                  <CardTitle className="mt-4">Contract Distribution</CardTitle>
+                  <TrendingUp className="h-8 w-8 text-blue-600" />
+                  <CardTitle className="mt-4">What-If Analysis</CardTitle>
                   <CardDescription>
-                    Automatically send contracts to team members when new projects are created
+                    Model multiple scenarios side-by-side to compare outcomes
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Automatic contract generation
+                      Baseline vs Alternative comparisons
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Team member notifications
+                      Delta and percent change tracking
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Document tracking & status
+                      Scenario cloning for quick iterations
                     </li>
                   </ul>
                 </CardContent>
@@ -81,25 +81,25 @@ export default function Home() {
 
               <Card>
                 <CardHeader>
-                  <Clock className="h-8 w-8 text-blue-600" />
-                  <CardTitle className="mt-4">Hours Reminders</CardTitle>
+                  <Calculator className="h-8 w-8 text-purple-600" />
+                  <CardTitle className="mt-4">Formula Engine</CardTitle>
                   <CardDescription>
-                    Smart reminders for team members to submit their hours on time
+                    Powerful calculation engine with dependency resolution
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Configurable reminder schedule
+                      9 math functions (IF, MAX, MIN, POW, etc.)
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Multi-channel notifications
+                      Automatic dependency ordering
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Hours tracking & approval
+                      Circular dependency detection
                     </li>
                   </ul>
                 </CardContent>
@@ -107,25 +107,25 @@ export default function Home() {
 
               <Card>
                 <CardHeader>
-                  <DollarSign className="h-8 w-8 text-green-600" />
-                  <CardTitle className="mt-4">Invoice Generation</CardTitle>
+                  <BarChart3 className="h-8 w-8 text-green-600" />
+                  <CardTitle className="mt-4">Non-Linear Curves</CardTitle>
                   <CardDescription>
-                    Automatic invoice creation based on approved hours and project rates
+                    Model complex relationships with effect curves
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Automatic invoice creation
+                      5 curve types (Linear, Logarithmic, Exponential, Step, Custom)
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Approved hours integration
+                      Live preview with Recharts
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Simplicate sync
+                      Custom interpolation support
                     </li>
                   </ul>
                 </CardContent>
@@ -133,25 +133,25 @@ export default function Home() {
 
               <Card>
                 <CardHeader>
-                  <Bell className="h-8 w-8 text-orange-600" />
-                  <CardTitle className="mt-4">Notifications</CardTitle>
+                  <Boxes className="h-8 w-8 text-orange-600" />
+                  <CardTitle className="mt-4">Multi-Tenant SaaS</CardTitle>
                   <CardDescription>
-                    Multi-channel notifications with user preferences and settings
+                    Enterprise-ready with organization-level isolation
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Email notifications
+                      Role-based access (Admin, Editor, Viewer)
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      Slack integration
+                      Complete data isolation
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      In-app notifications
+                      Audit logging for compliance
                     </li>
                   </ul>
                 </CardContent>
@@ -167,12 +167,12 @@ export default function Home() {
           <div className="mx-auto max-w-3xl text-center">
             <h3 className="text-3xl font-bold">Ready to get started?</h3>
             <p className="mt-4 text-lg text-muted-foreground">
-              Access the dashboard to configure workflows and start automating your Simplicate processes
+              Create your first scenario and start modeling supply chain decisions
             </p>
             <div className="mt-8">
-              <Link href="/admin/dashboard">
+              <Link href="/admin/scenarios">
                 <Button size="lg">
-                  Open Dashboard
+                  Create First Scenario
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
@@ -184,8 +184,8 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t">
         <div className="container flex h-16 items-center justify-between px-4 text-sm text-muted-foreground">
-          <p>Simplicate Automations - Production Ready</p>
-          <p>Built with Next.js, tRPC & Prisma</p>
+          <p>Supply Chain Scenario Simulator - Production Ready</p>
+          <p>Built with Next.js 16, tRPC 11 & Prisma 6</p>
         </div>
       </footer>
     </main>

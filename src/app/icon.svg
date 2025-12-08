@@ -1,4 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background -->
   <rect width="32" height="32" rx="6" fill="#0ea5e9"/>
-  <text x="16" y="23" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="white" text-anchor="middle">S</text>
+
+  <!-- Box icon (Supply Chain) -->
+  <g fill="white">
+    <!-- Main box -->
+    <path d="M16 8 L22 11 L22 17 L16 20 L10 17 L10 11 Z" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+
+    <!-- Box front face -->
+    <path d="M16 14 L22 11 L22 17 L16 20 Z" fill="white" opacity="0.3"/>
+
+    <!-- Box left face -->
+    <path d="M10 11 L16 14 L16 20 L10 17 Z" fill="white" opacity="0.5"/>
+
+    <!-- Box top -->
+    <path d="M10 11 L16 8 L22 11 L16 14 Z" fill="white"/>
+
+    <!-- Dividing line -->
+    <line x1="16" y1="8" x2="16" y2="14" stroke="white" stroke-width="1.2" opacity="0.7"/>
+  </g>
+
+  <!-- Small accent boxes (showing chain) -->
+  <circle cx="8" cy="24" r="2" fill="white" opacity="0.8"/>
+  <circle cx="24" cy="24" r="2" fill="white" opacity="0.8"/>
 </svg>
