@@ -693,30 +693,77 @@ export const syncRouter = createTRPCRouter({
 
       for (const invoice of simplicateInvoices) {
         try {
-          // Find the project by Simplicate ID (if project_id exists)
-          let project = null
-          if (invoice.project_id) {
-            project = await ctx.db.project.findFirst({
-              where: { simplicateId: invoice.project_id },
-            })
-
-            if (!project) {
-              results.skipped++
-              continue
-            }
-          } else {
+          // Skip if no project_id
+          if (!invoice.project_id && (!invoice.projects || invoice.projects.length === 0)) {
             results.skipped++
             continue
           }
 
+          // Find project by Simplicate ID
+          const projectId = invoice.project_id || invoice.projects?.[0]?.id
+          if (!projectId) {
+            results.skipped++
+            continue
+          }
+
+          const project = await ctx.db.project.findFirst({
+            where: { simplicateId: projectId },
+          })
+
+          if (!project) {
+            results.skipped++
+            continue
+          }
+
+          // Parse financial fields (Simplicate returns them as source of truth)
+          const totalExclVat = invoice.total_excluding_vat || 0
+          const totalVat = invoice.total_vat || 0
+          const totalInclVat = invoice.total_including_vat || totalExclVat + totalVat
+          const outstanding = invoice.total_outstanding ?? totalInclVat
+
+          // Parse dates
+          const invoiceDate = invoice.date ? new Date(invoice.date) : new Date()
+          const paymentTermDays = invoice.payment_term?.days ? parseInt(invoice.payment_term.days) : 30
+          const dueDate = new Date(invoiceDate)
+          dueDate.setDate(dueDate.getDate() + paymentTermDays)
+
+          // Map status from Simplicate status object
+          const statusName = invoice.status?.name?.toLowerCase() || ''
+          const mappedStatus = mapInvoiceStatus(statusName)
+
+          // Prepare invoice data
           const invoiceData = {
             projectId: project.id,
             simplicateInvoiceId: invoice.id,
             invoiceNumber: invoice.invoice_number || null,
-            amount: invoice.total_excl_vat || invoice.total_incl_vat || 0,
-            status: mapInvoiceStatus(invoice.status),
-            periodStart: invoice.date ? new Date(invoice.date) : new Date(),
-            periodEnd: invoice.date ? new Date(invoice.date) : new Date(),
+
+            // Financial data - Simplicate is source of truth
+            amount: totalExclVat,
+            totalVat,
+            totalInclVat,
+            totalOutstanding: outstanding,
+
+            // Metadata
+            description: invoice.subject || invoice.reference || null,
+            comments: invoice.comments || null,
+
+            // Dates
+            periodStart: invoiceDate,
+            periodEnd: invoiceDate,
+            dueDate,
+
+            // Status
+            status: mappedStatus,
+            sentAt: mappedStatus === 'SENT' || mappedStatus === 'PAID' ? invoiceDate : null,
+            paidAt: mappedStatus === 'PAID' ? invoiceDate : null,
+
+            // Organization details
+            clientName: invoice.organization?.name || null,
+            clientOrganizationId: invoice.organization_id || null,
+
+            // Payment terms
+            paymentTermDays,
+            paymentTermName: invoice.payment_term?.name || null,
           }
 
           // Upsert invoice
@@ -724,22 +771,76 @@ export const syncRouter = createTRPCRouter({
             where: { simplicateInvoiceId: invoice.id },
           })
 
+          let savedInvoice
           if (existingInvoice) {
-            await ctx.db.invoice.update({
+            savedInvoice = await ctx.db.invoice.update({
               where: { id: existingInvoice.id },
               data: invoiceData,
             })
             results.updated++
           } else {
-            await ctx.db.invoice.create({
+            savedInvoice = await ctx.db.invoice.create({
               data: invoiceData,
             })
             results.created++
+          }
+
+          // Sync invoice lines (NEW)
+          if (invoice.invoice_lines && invoice.invoice_lines.length > 0) {
+            // Delete old lines (for updates)
+            await ctx.db.invoiceLine.deleteMany({
+              where: { invoiceId: savedInvoice.id },
+            })
+
+            // Create new lines
+            for (const line of invoice.invoice_lines) {
+              const hours = parseFloat(line.amount || '0')
+              const rate = parseFloat(line.price || '0')
+              const subtotal = hours * rate
+              const vatPercentage = parseFloat(line.vat_class?.percentage || '0')
+              const vatAmount = parseFloat(line.total_vat || '0')
+              const total = subtotal + vatAmount
+
+              // Try to match to local ProjectService
+              let projectServiceId = null
+              if (line.service_id) {
+                const projectService = await ctx.db.projectService.findUnique({
+                  where: { simplicateServiceId: line.service_id },
+                })
+                projectServiceId = projectService?.id || null
+              }
+
+              await ctx.db.invoiceLine.create({
+                data: {
+                  invoiceId: savedInvoice.id,
+                  simplicateLineId: line.id,
+                  date: new Date(line.date),
+                  description: line.description,
+                  hours,
+                  rate,
+                  subtotal,
+                  vatPercentage,
+                  vatAmount,
+                  total,
+                  serviceId: line.service_id || null,
+                  projectServiceId,
+                },
+              })
+            }
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error'
           results.errors.push(`Failed to sync invoice ${invoice.id}: ${errorMessage}`)
         }
+      }
+
+      // Update sync timestamp
+      const appSettings = await ctx.db.appSettings.findFirst()
+      if (appSettings) {
+        await ctx.db.appSettings.update({
+          where: { id: appSettings.id },
+          data: { lastInvoicesSyncAt: new Date() },
+        })
       }
 
       return {
@@ -750,6 +851,120 @@ export const syncRouter = createTRPCRouter({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       throw new Error(`Failed to sync invoices from Simplicate: ${errorMessage}`)
+    }
+  }),
+
+  // Sync purchasing invoices from Simplicate to local database
+  syncPurchasingInvoices: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      const purchasingInvoices = await client.getAllPurchasingInvoices()
+
+      const results = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+
+      for (const invoice of purchasingInvoices) {
+        try {
+          // Skip if no project
+          if (!invoice.project?.id) {
+            results.skipped++
+            continue
+          }
+
+          // Find project
+          const project = await ctx.db.project.findFirst({
+            where: { simplicateId: invoice.project.id },
+          })
+
+          if (!project) {
+            results.skipped++
+            continue
+          }
+
+          // Find user (supplier) by Simplicate employee ID
+          // Suppliers are employees with employee IDs (co-owners, freelancers)
+          const user = await ctx.db.user.findFirst({
+            where: { simplicateEmployeeId: invoice.supplier?.id },
+          })
+
+          if (!user) {
+            // Skip if supplier not found as employee
+            results.skipped++
+            continue
+          }
+
+          // Parse financial data - Simplicate is source of truth
+          const totalExclVat = invoice.total_excluding_vat || 0
+          const totalVat = invoice.total_vat || 0
+          const totalInclVat = invoice.total_including_vat || totalExclVat + totalVat
+
+          // Parse dates
+          const invoiceDate = invoice.date ? new Date(invoice.date) : new Date()
+          const dueDate = invoice.due_date ? new Date(invoice.due_date) : invoiceDate
+
+          // Map status
+          const statusName = invoice.status?.name?.toLowerCase() || ''
+          const mappedStatus = mapPurchasingInvoiceStatus(statusName)
+
+          const invoiceData = {
+            projectId: project.id,
+            userId: user.id,
+            simplicateInvoiceId: invoice.id,
+
+            // Dates
+            periodStart: invoiceDate,
+            periodEnd: dueDate,
+
+            // Financial data - placeholder, needs actual breakdown from Simplicate
+            totalHours: 0,
+            hourlyRate: 0,
+            hoursAmount: totalExclVat,
+
+            subtotal: totalExclVat,
+            vatRate: totalVat > 0 ? (totalVat / totalExclVat) * 100 : 21,
+            vatAmount: totalVat,
+            total: totalInclVat,
+
+            status: mappedStatus,
+            needsReview: false, // From Simplicate, assumed verified
+          }
+
+          // Upsert
+          const existing = await ctx.db.purchasingInvoice.findUnique({
+            where: { simplicateInvoiceId: invoice.id },
+          })
+
+          if (existing) {
+            await ctx.db.purchasingInvoice.update({
+              where: { id: existing.id },
+              data: invoiceData,
+            })
+            results.updated++
+          } else {
+            await ctx.db.purchasingInvoice.create({
+              data: invoiceData,
+            })
+            results.created++
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to sync purchasing invoice ${invoice.id}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        totalProcessed: purchasingInvoices.length,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to sync purchasing invoices: ${errorMessage}`)
     }
   }),
 
@@ -1129,9 +1344,277 @@ export const syncRouter = createTRPCRouter({
 
       console.log('[SyncAll] Group 3 complete')
 
-      const totalCreated = results.projects.created + results.employees.created + results.services.created + results.mileage.created
-      const totalUpdated = results.projects.updated + results.employees.updated + results.services.updated + results.mileage.updated
-      const totalErrors = results.projects.errors.length + results.employees.errors.length + results.services.errors.length + results.mileage.errors.length
+      // Group 4: Invoices (outbound + purchasing in parallel)
+      console.log('[SyncAll] Group 4: Syncing invoices (outbound + purchasing) in parallel...')
+      const [invoicesResult, purchasingInvoicesResult] = await Promise.allSettled([
+        // Outbound invoices
+        (async () => {
+          const allInvoices = await client.getInvoices()
+          const res = { created: 0, updated: 0, skipped: 0, errors: [] as string[] }
+
+          for (const invoice of allInvoices) {
+            try {
+              // Skip if no projects or project_id
+              const projectId = invoice.project_id || invoice.projects?.[0]?.id
+              if (!projectId) {
+                res.skipped++
+                continue
+              }
+
+              // Find project
+              const project = await ctx.db.project.findFirst({
+                where: { simplicateId: projectId },
+              })
+
+              if (!project) {
+                res.skipped++
+                continue
+              }
+
+              // Parse financial data - Simplicate is source of truth
+              const amount = invoice.total_excluding_vat || 0
+              const totalVat = invoice.total_vat || 0
+              const totalInclVat = invoice.total_including_vat || amount + totalVat
+              const totalOutstanding = invoice.total_outstanding || totalInclVat
+
+              // Parse dates
+              const invoiceDate = invoice.date ? new Date(invoice.date) : new Date()
+              const paymentTermDays = invoice.payment_term?.days ? parseInt(invoice.payment_term.days) : null
+              const dueDate = paymentTermDays
+                ? new Date(invoiceDate.getTime() + paymentTermDays * 24 * 60 * 60 * 1000)
+                : invoiceDate
+
+              // Map status
+              const statusName = invoice.status?.name?.toLowerCase() || ''
+              const mappedStatus = mapInvoiceStatus(statusName)
+
+              const invoiceData = {
+                projectId: project.id,
+                simplicateInvoiceId: invoice.id,
+                invoiceNumber: invoice.invoice_number || null,
+                amount,
+                totalVat,
+                totalInclVat,
+                totalOutstanding,
+                periodStart: invoiceDate,
+                periodEnd: dueDate,
+                dueDate,
+                paymentTermDays,
+                clientName: invoice.organization?.name || project.clientName || null,
+                status: mappedStatus,
+              }
+
+              // Upsert invoice
+              const existing = await ctx.db.invoice.findUnique({
+                where: { simplicateInvoiceId: invoice.id },
+              })
+
+              if (existing) {
+                await ctx.db.invoice.update({
+                  where: { id: existing.id },
+                  data: invoiceData,
+                })
+                res.updated++
+              } else {
+                await ctx.db.invoice.create({
+                  data: invoiceData,
+                })
+                res.created++
+              }
+
+              // Sync invoice lines if available
+              if (invoice.invoice_lines && invoice.invoice_lines.length > 0) {
+                const invoiceId = existing?.id || (await ctx.db.invoice.findUnique({ where: { simplicateInvoiceId: invoice.id } }))!.id
+
+                for (const line of invoice.invoice_lines) {
+                  try {
+                    // Parse string fields to numbers
+                    const lineHours = parseFloat(line.amount) || 0
+                    const lineRate = parseFloat(line.price) || 0
+                    const subtotal = lineHours * lineRate
+                    const vatPercentage = line.vat_class?.percentage ? parseFloat(line.vat_class.percentage) : 21
+                    const vatAmount = (subtotal * vatPercentage) / 100
+                    const total = subtotal + vatAmount
+
+                    // Try to match service by service_id
+                    let service = null
+                    if (line.service_id) {
+                      service = await ctx.db.projectService.findFirst({
+                        where: {
+                          projectId: project.id,
+                          simplicateServiceId: line.service_id,
+                        },
+                      })
+                    }
+
+                    const lineData = {
+                      invoiceId,
+                      projectServiceId: service?.id || null,
+                      description: line.description || 'Invoice line',
+                      date: new Date(line.date),
+                      hours: lineHours,
+                      rate: lineRate,
+                      subtotal,
+                      vatPercentage,
+                      vatAmount,
+                      total,
+                      serviceId: line.service_id || null,
+                      simplicateLineId: line.id || null,
+                    }
+
+                    // Upsert line (use simplicateLineId if available, otherwise description + hours)
+                    const existingLine = line.id
+                      ? await ctx.db.invoiceLine.findUnique({ where: { simplicateLineId: line.id } })
+                      : await ctx.db.invoiceLine.findFirst({
+                          where: {
+                            invoiceId: lineData.invoiceId,
+                            description: lineData.description,
+                            hours: lineData.hours,
+                          },
+                        })
+
+                    if (existingLine) {
+                      await ctx.db.invoiceLine.update({
+                        where: { id: existingLine.id },
+                        data: lineData,
+                      })
+                    } else {
+                      await ctx.db.invoiceLine.create({
+                        data: lineData,
+                      })
+                    }
+                  } catch (lineError) {
+                    res.errors.push(`Failed to sync invoice line: ${lineError instanceof Error ? lineError.message : 'Unknown error'}`)
+                  }
+                }
+              }
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+              res.errors.push(`Failed to sync invoice ${invoice.id}: ${errorMessage}`)
+            }
+          }
+
+          return res
+        })(),
+
+        // Purchasing invoices
+        (async () => {
+          const allPurchasingInvoices = await client.getAllPurchasingInvoices()
+          const res = { created: 0, updated: 0, skipped: 0, errors: [] as string[] }
+
+          for (const invoice of allPurchasingInvoices) {
+            try {
+              // Skip if no project
+              if (!invoice.project?.id) {
+                res.skipped++
+                continue
+              }
+
+              // Find project
+              const project = await ctx.db.project.findFirst({
+                where: { simplicateId: invoice.project.id },
+              })
+
+              if (!project) {
+                res.skipped++
+                continue
+              }
+
+              // Find user (supplier) by Simplicate employee ID
+              const user = await ctx.db.user.findFirst({
+                where: { simplicateEmployeeId: invoice.supplier?.id },
+              })
+
+              if (!user) {
+                res.skipped++
+                continue
+              }
+
+              // Parse financial data
+              const totalExclVat = invoice.total_excluding_vat || 0
+              const totalVat = invoice.total_vat || 0
+              const totalInclVat = invoice.total_including_vat || totalExclVat + totalVat
+
+              // Parse dates
+              const invoiceDate = invoice.date ? new Date(invoice.date) : new Date()
+              const dueDate = invoice.due_date ? new Date(invoice.due_date) : invoiceDate
+
+              // Map status
+              const statusName = invoice.status?.name?.toLowerCase() || ''
+              const mappedStatus = mapPurchasingInvoiceStatus(statusName)
+
+              const invoiceData = {
+                projectId: project.id,
+                userId: user.id,
+                simplicateInvoiceId: invoice.id,
+                periodStart: invoiceDate,
+                periodEnd: dueDate,
+                totalHours: 0,
+                hourlyRate: 0,
+                hoursAmount: totalExclVat,
+                subtotal: totalExclVat,
+                vatRate: totalVat > 0 ? (totalVat / totalExclVat) * 100 : 21,
+                vatAmount: totalVat,
+                total: totalInclVat,
+                status: mappedStatus,
+                needsReview: false,
+              }
+
+              // Upsert
+              const existing = await ctx.db.purchasingInvoice.findUnique({
+                where: { simplicateInvoiceId: invoice.id },
+              })
+
+              if (existing) {
+                await ctx.db.purchasingInvoice.update({
+                  where: { id: existing.id },
+                  data: invoiceData,
+                })
+                res.updated++
+              } else {
+                await ctx.db.purchasingInvoice.create({
+                  data: invoiceData,
+                })
+                res.created++
+              }
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+              res.errors.push(`Failed to sync purchasing invoice ${invoice.id}: ${errorMessage}`)
+            }
+          }
+
+          return res
+        })(),
+      ])
+
+      results.invoices = invoicesResult.status === 'fulfilled'
+        ? invoicesResult.value
+        : { created: 0, updated: 0, skipped: 0, errors: [invoicesResult.reason?.message || 'Invoices sync failed'] }
+
+      const purchasingResults = purchasingInvoicesResult.status === 'fulfilled'
+        ? purchasingInvoicesResult.value
+        : { created: 0, updated: 0, skipped: 0, errors: [purchasingInvoicesResult.reason?.message || 'Purchasing invoices sync failed'] }
+
+      // Merge purchasing results into invoices for totals
+      results.invoices.created += purchasingResults.created
+      results.invoices.updated += purchasingResults.updated
+      results.invoices.skipped += purchasingResults.skipped
+      results.invoices.errors.push(...purchasingResults.errors)
+
+      console.log('[SyncAll] Group 4 complete')
+
+      // Update sync timestamp for invoices
+      const settingsForInvoices = await ctx.db.appSettings.findFirst()
+      if (settingsForInvoices) {
+        await ctx.db.appSettings.update({
+          where: { id: settingsForInvoices.id },
+          data: { lastInvoicesSyncAt: new Date() },
+        })
+      }
+
+      const totalCreated = results.projects.created + results.employees.created + results.services.created + results.mileage.created + results.invoices.created
+      const totalUpdated = results.projects.updated + results.employees.updated + results.services.updated + results.mileage.updated + results.invoices.updated
+      const totalErrors = results.projects.errors.length + results.employees.errors.length + results.services.errors.length + results.mileage.errors.length + results.invoices.errors.length
       const duration = ((Date.now() - startTime) / 1000).toFixed(1)
 
       console.log('[SyncAll] Complete!', { totalCreated, totalUpdated, totalErrors, duration: `${duration}s` })
@@ -1239,8 +1722,22 @@ function mapInvoiceStatus(status?: string): 'DRAFT' | 'PENDING_APPROVAL' | 'APPR
   if (statusLower.includes('pending')) return 'PENDING_APPROVAL'
   if (statusLower.includes('approved')) return 'APPROVED'
   if (statusLower.includes('sent')) return 'SENT'
-  if (statusLower.includes('paid')) return 'PAID'
+  if (statusLower.includes('paid') || statusLower.includes('payed')) return 'PAID'
   if (statusLower.includes('cancel')) return 'CANCELLED'
+
+  return 'DRAFT' // Default
+}
+
+// Helper function to map Simplicate purchasing invoice status to our enum
+function mapPurchasingInvoiceStatus(status?: string): 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID' | 'REJECTED' {
+  if (!status) return 'DRAFT'
+
+  const statusLower = status.toLowerCase()
+
+  if (statusLower.includes('pending')) return 'PENDING_APPROVAL'
+  if (statusLower.includes('approved')) return 'APPROVED'
+  if (statusLower.includes('paid') || statusLower.includes('payed')) return 'PAID'
+  if (statusLower.includes('reject')) return 'REJECTED'
 
   return 'DRAFT' // Default
 }

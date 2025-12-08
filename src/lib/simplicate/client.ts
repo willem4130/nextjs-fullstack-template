@@ -161,10 +161,110 @@ export interface SimplicateInvoice {
   id: string;
   invoice_number?: string;
   project_id?: string;
-  status: string;
+  status: {
+    id: string;
+    name: string;
+  };
   date?: string;
-  total_excl_vat?: number;
-  total_incl_vat?: number;
+
+  // Financial fields
+  total_excluding_vat?: number;
+  total_vat?: number;
+  total_including_vat?: number;
+  total_outstanding?: number;
+
+  // Metadata
+  subject?: string;
+  reference?: string;
+  comments?: string;
+  composition_type?: string;
+
+  // Organization & Contact
+  organization?: {
+    id: string;
+    name: string;
+  };
+  organization_id?: string;
+  person?: {
+    id: string;
+    full_name?: string;
+  };
+
+  // Payment terms
+  payment_term?: {
+    id: string;
+    name: string;
+    days: string;
+  };
+
+  // Project details
+  projects?: Array<{
+    id: string;
+    name: string;
+    project_number?: string;
+    organization?: {
+      id: string;
+      name: string;
+    };
+    project_manager?: {
+      id: string;
+      name: string;
+      person_id?: string;
+    };
+  }>;
+
+  // Invoice lines (for line-item margin tracking)
+  invoice_lines?: Array<{
+    id: string;
+    date: string;
+    description: string;
+    amount: string;  // hours
+    price: string;   // rate
+    total_vat: string;
+    service_id?: string;
+    vat_class?: {
+      id: string;
+      label: string;
+      percentage: string;
+    };
+  }>;
+
+  // Dates
+  created_at?: string;
+  updated_at?: string;
+
+  // Reminders
+  reminder?: {
+    status?: string;
+    paused?: boolean;
+    next_action?: string;
+  };
+}
+
+export interface SimplicatePurchasingInvoice {
+  id: string;
+  invoice_number?: string;
+  supplier?: {
+    id: string;
+    name: string;
+  };
+  project?: {
+    id: string;
+    name: string;
+  };
+  date?: string;
+  due_date?: string;
+  total_excluding_vat?: number;
+  total_vat?: number;
+  total_including_vat?: number;
+  status: {
+    id: string;
+    name: string;
+  };
+  payment_status?: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ==========================================
@@ -436,6 +536,50 @@ export class SimplicateClient {
 
   async getInvoice(id: string): Promise<SimplicateInvoice> {
     return this.request<SimplicateInvoice>(`/invoices/invoice/${id}`);
+  }
+
+  // ==========================================
+  // Purchasing Invoices (Costs/Supplier Invoices)
+  // ==========================================
+
+  async getPurchasingInvoices(params?: {
+    offset?: number;
+    limit?: number;
+    status?: string;
+  }): Promise<SimplicatePurchasingInvoice[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.offset) queryParams.set('offset', params.offset.toString());
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    if (params?.status) queryParams.set('q[status]', params.status);
+
+    const query = queryParams.toString();
+    return this.request<SimplicatePurchasingInvoice[]>(
+      `/costs/purchaseinvoice${query ? `?${query}` : ''}`
+    );
+  }
+
+  async getAllPurchasingInvoices(): Promise<SimplicatePurchasingInvoice[]> {
+    const allInvoices: SimplicatePurchasingInvoice[] = [];
+    const pageSize = 100;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const batch = await this.getPurchasingInvoices({
+        offset,
+        limit: pageSize,
+      });
+
+      allInvoices.push(...batch);
+
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        offset += pageSize;
+      }
+    }
+
+    return allInvoices;
   }
 
   // ==========================================

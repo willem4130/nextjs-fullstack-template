@@ -390,38 +390,82 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id                  String         @id @default(cuid())
-  projectId           String
+  id                    String         @id @default(cuid())
+  projectId             String
 
   // Invoice details
-  invoiceNumber       String?        @unique
-  amount              Float
-  description         String?
+  invoiceNumber         String?        @unique
+  amount                Float          // total_excluding_vat
+  totalVat              Float?
+  totalInclVat          Float?
+  totalOutstanding      Float?
+  description           String?
+  comments              String?
 
   // Date tracking
-  periodStart         DateTime
-  periodEnd           DateTime
-  dueDate             DateTime?
+  periodStart           DateTime
+  periodEnd             DateTime
+  dueDate               DateTime?
 
   // Status
-  status              InvoiceStatus  @default(DRAFT)
-  approvedAt          DateTime?
-  sentAt              DateTime?
-  paidAt              DateTime?
+  status                InvoiceStatus  @default(DRAFT)
+  approvedAt            DateTime?
+  sentAt                DateTime?
+  paidAt                DateTime?
+
+  // Client details
+  clientName            String?
+  clientOrganizationId  String?
+
+  // Payment terms
+  paymentTermDays       Int?
+  paymentTermName       String?
 
   // Simplicate integration
-  simplicateInvoiceId String?        @unique
+  simplicateInvoiceId   String?        @unique
 
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   // Relations
-  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  hoursEntries        HoursEntry[]
+  project               Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hoursEntries          HoursEntry[]
+  invoiceLines          InvoiceLine[]
 
   @@index([projectId])
   @@index([status])
   @@index([invoiceNumber])
+}
+
+model InvoiceLine {
+  id                  String     @id @default(cuid())
+  invoiceId           String
+  simplicateLineId    String?    @unique
+
+  // Line details
+  date                DateTime
+  description         String
+  hours               Float      // amount field from Simplicate
+  rate                Float      // price field from Simplicate
+
+  // Financial calculations
+  subtotal            Float      // hours × rate
+  vatPercentage       Float?
+  vatAmount           Float?
+  total               Float
+
+  // Tracking
+  serviceId           String?    // Simplicate service_id
+  projectServiceId    String?    // Link to local ProjectService
+
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  // Relations
+  invoice             Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([serviceId])
 }
 
 // ==========================================
