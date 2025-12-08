@@ -10,19 +10,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { api } from "@/trpc/react"
-
-// Hardcoded organization ID for now (from seed data)
-const ORG_ID = 'cmix8gcs00000ob0emg8dvqm4' // RetailCo Warehouse
+import { toast } from "sonner"
 
 export default function ScenariosPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null)
+  const [deletingScenarioId, setDeletingScenarioId] = useState<string | null>(null)
+
+  // Get organization ID dynamically
+  const { data: org } = api.organization.getFirst.useQuery()
+  const organizationId = org?.id ?? ''
 
   // Query scenarios from database
-  const { data: dbScenarios = [], refetch } = api.scenario.list.useQuery({
-    organizationId: ORG_ID,
-  })
+  const { data: dbScenarios = [], refetch } = api.scenario.list.useQuery(
+    { organizationId },
+    { enabled: !!organizationId }
+  )
 
   // Transform database scenarios to UI format
   const scenarios: Scenario[] = dbScenarios.map((s) => ({
@@ -46,6 +60,10 @@ export default function ScenariosPage() {
       refetch()
       setIsCreateDialogOpen(false)
       setEditingScenario(null)
+      toast.success("Scenario created successfully")
+    },
+    onError: (error) => {
+      toast.error(error.message)
     },
   })
 
@@ -54,6 +72,22 @@ export default function ScenariosPage() {
       refetch()
       setIsCreateDialogOpen(false)
       setEditingScenario(null)
+      toast.success("Scenario updated successfully")
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+
+  const deleteMutation = api.scenario.delete.useMutation({
+    onSuccess: () => {
+      refetch()
+      setDeletingScenarioId(null)
+      toast.success("Scenario deleted successfully")
+    },
+    onError: (error) => {
+      toast.error(error.message)
+      setDeletingScenarioId(null)
     },
   })
 
@@ -70,11 +104,28 @@ export default function ScenariosPage() {
     }
   }
 
+  const handleDelete = (id: string) => {
+    setDeletingScenarioId(id)
+  }
+
+  const confirmDelete = () => {
+    if (deletingScenarioId && organizationId) {
+      deleteMutation.mutate({
+        organizationId,
+        id: deletingScenarioId,
+      })
+    }
+  }
+
   const handleSubmit = async (values: ScenarioFormValues) => {
+    if (!organizationId) {
+      toast.error("Organization not found")
+      return
+    }
     if (editingScenario) {
       // Update existing scenario
       updateMutation.mutate({
-        organizationId: ORG_ID,
+        organizationId,
         id: editingScenario.id,
         name: values.name,
         description: values.description,
@@ -84,7 +135,7 @@ export default function ScenariosPage() {
     } else {
       // Create new scenario
       createMutation.mutate({
-        organizationId: ORG_ID,
+        organizationId,
         name: values.name,
         description: values.description,
         timePeriodType: values.timePeriodType === 'SINGLE' ? 'SINGLE_POINT' : values.timePeriodType,
@@ -118,6 +169,7 @@ export default function ScenariosPage() {
         scenarios={scenarios}
         onCreateNew={handleCreateNew}
         onEdit={handleEdit}
+        onDelete={handleDelete}
         onCompare={handleCompare}
       />
 
@@ -153,6 +205,30 @@ export default function ScenariosPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deletingScenarioId !== null}
+        onOpenChange={(open) => !open && setDeletingScenarioId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Scenario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this scenario? This action cannot be undone.
+              All associated variable values and calculations will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

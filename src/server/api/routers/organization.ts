@@ -6,6 +6,13 @@ import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc'
 
 export const organizationRouter = createTRPCRouter({
   /**
+   * Get first organization (for development)
+   */
+  getFirst: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db.organization.findFirst()
+  }),
+
+  /**
    * Get current user's organization
    */
   getCurrent: protectedProcedure.query(async ({ ctx }) => {

@@ -11,7 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileText, Plus, TrendingDown, TrendingUp } from "lucide-react"
+import { FileText, Plus, TrendingDown, TrendingUp, Pencil, Trash2 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export interface Scenario {
   id: string
@@ -31,10 +32,11 @@ interface ScenarioListProps {
   scenarios: Scenario[]
   onCreateNew: () => void
   onEdit: (id: string) => void
+  onDelete: (id: string) => void
   onCompare: (ids: string[]) => void
 }
 
-export function ScenarioList({ scenarios, onCreateNew, onEdit, onCompare }: ScenarioListProps) {
+export function ScenarioList({ scenarios, onCreateNew, onEdit, onDelete, onCompare }: ScenarioListProps) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -142,9 +144,36 @@ export function ScenarioList({ scenarios, onCreateNew, onEdit, onCompare }: Scen
                     {new Date(scenario.updatedAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => onEdit(scenario.id)}>
-                      Edit
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEdit(scenario.id)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onDelete(scenario.id)}
+                                disabled={scenario.isBaseline}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {scenario.isBaseline && (
+                            <TooltipContent>
+                              <p>Cannot delete baseline scenario</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
