@@ -13,7 +13,7 @@ import {
 import { api } from "@/trpc/react"
 
 // Hardcoded organization ID for now (from seed data)
-const ORG_ID = 'cmix6hmfc0000obbsvi3idngs'
+const ORG_ID = 'cmix8gcs00000ob0emg8dvqm4' // RetailCo Warehouse
 
 export default function ScenariosPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
