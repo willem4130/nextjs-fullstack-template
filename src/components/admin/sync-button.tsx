@@ -22,6 +22,7 @@ export function SyncButton() {
 
   const syncMutation = api.sync.syncAll.useMutation({
     onSuccess: (data) => {
+      console.log('[SyncButton] Sync successful:', data)
       setLastSyncResult({
         success: true,
         message: data.message,
@@ -32,6 +33,7 @@ export function SyncButton() {
       setTimeout(() => setLastSyncResult(null), 5000)
     },
     onError: (error) => {
+      console.error('[SyncButton] Sync failed:', error)
       setLastSyncResult({
         success: false,
         message: error.message,
@@ -63,7 +65,10 @@ export function SyncButton() {
           <Button
             variant={lastSyncResult?.success === false ? 'destructive' : 'outline'}
             size="sm"
-            onClick={() => syncMutation.mutate()}
+            onClick={() => {
+              console.log('[SyncButton] Button clicked, triggering sync...')
+              syncMutation.mutate()
+            }}
             disabled={syncMutation.isPending}
             className="gap-2"
           >
