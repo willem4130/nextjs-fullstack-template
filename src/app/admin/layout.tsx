@@ -368,7 +368,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main Content */}
       <main className="flex-1 pl-64">
         {/* Top Header with Sync Button */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-end gap-4 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="text-xs text-muted-foreground">
+            Deployed: {new Date(process.env.NEXT_PUBLIC_BUILD_TIME || Date.now()).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </div>
           <SyncButton />
         </header>
         <div className="container mx-auto p-6">{children}</div>
