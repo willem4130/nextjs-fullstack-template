@@ -85,15 +85,39 @@ export interface SimplicateHours {
 
 export interface SimplicateMileage {
   id: string;
-  employee_id: string;
-  project_id?: string;
-  projectservice_id?: string;
-  date: string;
-  kilometers: number;
+  employee: {
+    id: string;
+    name: string;
+  };
+  project?: {
+    id: string;
+    name: string;
+    project_number?: string;
+    organization?: {
+      id: string;
+      name: string;
+    };
+  };
+  projectservice?: {
+    id: string;
+    name: string;
+  };
+  start_date: string;
+  mileage: number;
   description?: string;
-  rate?: number;
-  from_address?: string;
-  to_address?: string;
+  tariff?: number;
+  related_hours_id?: string;
+  invoice_status?: string;
+  invoice_id?: string;
+  invoiceline_id?: string;
+  source?: string;
+  vatclass?: {
+    id: string;
+    label: string;
+    percentage: number;
+  };
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SimplicateServiceHourType {

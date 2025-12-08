@@ -774,9 +774,15 @@ export const syncRouter = createTRPCRouter({
 
       for (const entry of mileageData) {
         try {
+          // Skip entries without project
+          if (!entry.project?.id) {
+            results.skipped++
+            continue
+          }
+
           // Match project by Simplicate ID
           const project = await ctx.db.project.findFirst({
-            where: { simplicateId: entry.project_id }
+            where: { simplicateId: entry.project.id }
           })
 
           if (!project) {
@@ -786,7 +792,7 @@ export const syncRouter = createTRPCRouter({
 
           // Match user by Simplicate employee ID
           const user = await ctx.db.user.findFirst({
-            where: { simplicateEmployeeId: entry.employee_id }
+            where: { simplicateEmployeeId: entry.employee.id }
           })
 
           if (!user) {
@@ -794,12 +800,12 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
-          // Determine km rate: Use rate from Simplicate (project-specific),
+          // Determine km rate: Use tariff from Simplicate (project-specific),
           // fallback to project rate, then global default
-          const kmRate = entry.rate ?? project.kmRate ?? defaultKmRate
+          const kmRate = entry.tariff ?? project.kmRate ?? defaultKmRate
 
           // Calculate cost: km × rate
-          const kmCost = entry.kilometers * kmRate
+          const kmCost = entry.mileage * kmRate
 
           // Upsert expense
           const existing = await ctx.db.expense.findUnique({
@@ -811,10 +817,10 @@ export const syncRouter = createTRPCRouter({
             userId: user.id,
             simplicateExpenseId: entry.id,
             category: 'KILOMETERS' as const,
-            kilometers: entry.kilometers,
+            kilometers: entry.mileage,
             amount: kmCost,
-            date: new Date(entry.date),
-            description: entry.description || null,
+            date: new Date(entry.start_date),
+            description: entry.description || `Mileage for ${entry.project?.name || 'project'}`,
             status: 'APPROVED' as const,
           }
 
@@ -1046,14 +1052,20 @@ export const syncRouter = createTRPCRouter({
 
         for (const mileage of mileageData) {
           try {
+            // Skip entries without project
+            if (!mileage.project?.id) {
+              results.mileage.errors.push(`Skipped mileage: no project`)
+              continue
+            }
+
             // Find the project
-            const project = mileage.project_id ? await ctx.db.project.findUnique({
-              where: { simplicateId: mileage.project_id },
-            }) : null
+            const project = await ctx.db.project.findUnique({
+              where: { simplicateId: mileage.project.id },
+            })
 
             // Find the user (employee)
             const user = await ctx.db.user.findUnique({
-              where: { simplicateEmployeeId: mileage.employee_id },
+              where: { simplicateEmployeeId: mileage.employee.id },
             })
 
             if (!project || !user) {
@@ -1061,11 +1073,11 @@ export const syncRouter = createTRPCRouter({
               continue
             }
 
-            // Determine km rate: Use rate from Simplicate (project-specific),
+            // Determine km rate: Use tariff from Simplicate (project-specific),
             // fallback to project rate, then global default
-            const kmRate = mileage.rate ?? project.kmRate ?? defaultKmRate
+            const kmRate = mileage.tariff ?? project.kmRate ?? defaultKmRate
 
-            const kilometers = mileage.kilometers
+            const kilometers = mileage.mileage
             const cost = kilometers * kmRate
 
             const expenseData = {
@@ -1073,10 +1085,10 @@ export const syncRouter = createTRPCRouter({
               userId: user.id,
               simplicateExpenseId: mileage.id,
               category: 'KILOMETERS' as const,
-              description: mileage.description || null,
+              description: mileage.description || `Mileage for ${mileage.project?.name || 'project'}`,
               amount: cost,
               kilometers,
-              date: new Date(mileage.date),
+              date: new Date(mileage.start_date),
               status: 'APPROVED' as const,
             }
 
