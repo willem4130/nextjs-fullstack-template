@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [isSyncingProjectMembers, setIsSyncingProjectMembers] = useState(false)
   const [isSyncingHours, setIsSyncingHours] = useState(false)
   const [isSyncingInvoices, setIsSyncingInvoices] = useState(false)
+  const [isSyncingMileage, setIsSyncingMileage] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
@@ -166,6 +167,22 @@ export default function SettingsPage() {
     },
   })
 
+  const syncMileage = api.sync.syncMileage.useMutation({
+    onSuccess: (data) => {
+      setIsSyncingMileage(false)
+      const skippedInfo = data.skipped > 0 ? ` (${data.skipped} skipped)` : ''
+      setSyncMessage(
+        `✅ Mileage sync complete! Created: ${data.created}, Updated: ${data.updated}, Total: ${data.totalProcessed}${skippedInfo}`
+      )
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+    onError: (error) => {
+      setIsSyncingMileage(false)
+      setSyncMessage(`❌ Mileage sync failed: ${error.message}`)
+      setTimeout(() => setSyncMessage(null), 10000)
+    },
+  })
+
   const handleSyncProjects = () => {
     setIsSyncingProjects(true)
     setSyncMessage(null)
@@ -202,7 +219,13 @@ export default function SettingsPage() {
     syncProjectMembers.mutate()
   }
 
-  const isSyncing = isSyncingProjects || isSyncingEmployees || isSyncingServices || isSyncingProjectMembers || isSyncingHours || isSyncingInvoices || isResetting
+  const handleSyncMileage = () => {
+    setIsSyncingMileage(true)
+    setSyncMessage(null)
+    syncMileage.mutate()
+  }
+
+  const isSyncing = isSyncingProjects || isSyncingEmployees || isSyncingServices || isSyncingProjectMembers || isSyncingHours || isSyncingInvoices || isSyncingMileage || isResetting
 
   // Reset and sync mutation
   const resetAndSync = api.sync.resetAndSync.useMutation({
@@ -492,6 +515,32 @@ export default function SettingsPage() {
                   <>
                     <FileText className="mr-2 h-4 w-4" />
                     Sync Invoices
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Mileage */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Mileage
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Mileage (kilometers) from Simplicate (€0.23/km)
+                </p>
+              </div>
+              <Button onClick={handleSyncMileage} disabled={isSyncing} size="sm">
+                {isSyncingMileage ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Clock className="mr-2 h-4 w-4" />
+                    Sync Mileage
                   </>
                 )}
               </Button>

@@ -298,7 +298,7 @@ export default function FinancialsPage() {
                             {formatCurrency(project.revenue)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(project.cost)}
+                            {formatCurrency(project.totalCost)}
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCurrency(project.margin)}
@@ -366,7 +366,7 @@ export default function FinancialsPage() {
                             {formatCurrency(employee.revenue)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(employee.cost)}
+                            {formatCurrency(employee.totalCost)}
                           </TableCell>
                           <TableCell className="text-right">
                             <span className={getMarginColor(employee.marginPercentage)}>

@@ -136,6 +136,7 @@ interface FilterState {
   sortOrder: 'asc' | 'desc'
   billableOnly: boolean
   marginThreshold: 'all' | 'healthy' | 'warning' | 'critical'
+  showKilometers: boolean
 }
 
 const defaultFilters: FilterState = {
@@ -146,6 +147,7 @@ const defaultFilters: FilterState = {
   sortOrder: 'asc',
   billableOnly: false,
   marginThreshold: 'all',
+  showKilometers: true,  // Visible by default
 }
 
 // LocalStorage key
@@ -194,6 +196,7 @@ export default function HoursPage() {
         sortOrder: savedFilters.sortOrder || 'asc',
         billableOnly: savedFilters.billableOnly || false,
         marginThreshold: savedFilters.marginThreshold || 'all',
+        showKilometers: savedFilters.showKilometers ?? true,
       })
     }
   }, [defaultPreset])
@@ -281,6 +284,7 @@ export default function HoursPage() {
       sortOrder: savedFilters.sortOrder || 'asc',
       billableOnly: savedFilters.billableOnly || false,
       marginThreshold: savedFilters.marginThreshold || 'all',
+      showKilometers: savedFilters.showKilometers ?? true,
     })
   }
 
@@ -467,6 +471,23 @@ export default function HoursPage() {
                   <SelectItem value="critical">Critical (&lt;25%)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Kilometers toggle */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Display</label>
+              <div className="flex items-center space-x-2 h-10 px-3 py-2 border rounded-md bg-background">
+                <input
+                  type="checkbox"
+                  id="show-kilometers"
+                  checked={filters.showKilometers}
+                  onChange={(e) => setFilters(f => ({ ...f, showKilometers: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="show-kilometers" className="text-sm cursor-pointer">
+                  Show kilometers
+                </Label>
+              </div>
             </div>
 
             {/* Sort by */}
@@ -715,7 +736,12 @@ export default function HoursPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{projectsSummary?.totals.hoursThisMonth.toFixed(1) || '0'}</div>
-            <p className="text-xs text-muted-foreground">{getFilterDescription()}</p>
+            <p className="text-xs text-muted-foreground">
+              {getFilterDescription()}
+              {projectsSummary?.totals.kilometersThisMonth && projectsSummary.totals.kilometersThisMonth > 0 && (
+                <span> • {projectsSummary.totals.kilometersThisMonth.toFixed(0)}km traveled</span>
+              )}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -882,12 +908,17 @@ export default function HoursPage() {
                                     <TableRow>
                                       <TableHead>Employee</TableHead>
                                       <TableHead className="text-right">Hours</TableHead>
+                                      {filters.showKilometers && <TableHead className="text-right">KM</TableHead>}
                                       <TableHead className="text-right">Rate</TableHead>
+                                      {filters.showKilometers && <TableHead className="text-right">KM Rate</TableHead>}
                                       <TableHead className="text-right">Revenue</TableHead>
                                       <TableHead className="text-right">Cost</TableHead>
+                                      {filters.showKilometers && <TableHead className="text-right">KM Cost</TableHead>}
+                                      {filters.showKilometers && <TableHead className="text-right">Total Cost</TableHead>}
                                       <TableHead className="text-right">Margin</TableHead>
                                       <TableHead className="text-right">Margin %</TableHead>
                                       <TableHead className="text-right">Entries</TableHead>
+                                      {filters.showKilometers && <TableHead className="text-right">Trips</TableHead>}
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -902,6 +933,11 @@ export default function HoursPage() {
                                         <TableCell className="text-right font-medium">
                                           {emp.hoursThisMonth.toFixed(1)}h
                                         </TableCell>
+                                        {filters.showKilometers && (
+                                          <TableCell className="text-right font-medium">
+                                            {emp.totalKilometers?.toFixed(0) || 0}km
+                                          </TableCell>
+                                        )}
                                         <TableCell className="text-right text-muted-foreground">
                                           <div className="flex flex-col items-end">
                                             <span>€{emp.avgRate?.toFixed(0) || '-'}</span>
@@ -912,12 +948,27 @@ export default function HoursPage() {
                                             )}
                                           </div>
                                         </TableCell>
+                                        {filters.showKilometers && (
+                                          <TableCell className="text-right text-muted-foreground">
+                                            €0.23/km
+                                          </TableCell>
+                                        )}
                                         <TableCell className="text-right font-medium">
                                           {formatCurrency(emp.totalRevenue || 0)}
                                         </TableCell>
                                         <TableCell className="text-right text-muted-foreground">
-                                          {formatCurrency(emp.totalCost || 0)}
+                                          {formatCurrency((emp.totalCost || 0) - (emp.kmCost || 0))}
                                         </TableCell>
+                                        {filters.showKilometers && (
+                                          <TableCell className="text-right text-muted-foreground">
+                                            {formatCurrency(emp.kmCost || 0)}
+                                          </TableCell>
+                                        )}
+                                        {filters.showKilometers && (
+                                          <TableCell className="text-right font-medium">
+                                            {formatCurrency(emp.totalCost || 0)}
+                                          </TableCell>
+                                        )}
                                         <TableCell className="text-right font-medium">
                                           {formatCurrency(emp.totalMargin || 0)}
                                         </TableCell>
@@ -929,6 +980,11 @@ export default function HoursPage() {
                                         <TableCell className="text-right text-muted-foreground">
                                           {emp.entries}
                                         </TableCell>
+                                        {filters.showKilometers && (
+                                          <TableCell className="text-right text-muted-foreground">
+                                            {emp.trips || 0}
+                                          </TableCell>
+                                        )}
                                       </TableRow>
                                     ))}
                                   </TableBody>

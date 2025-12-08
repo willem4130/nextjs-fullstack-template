@@ -753,6 +753,96 @@ export const syncRouter = createTRPCRouter({
     }
   }),
 
+  // Sync mileage from Simplicate to local database
+  syncMileage: publicProcedure.mutation(async ({ ctx }) => {
+    const client = getSimplicateClient()
+
+    try {
+      // Get km rate from settings (default 0.23 EUR/km)
+      const settings = await ctx.db.appSettings.findFirst()
+      const kmRate = settings?.kmRate || 0.23
+
+      // Fetch all mileage with pagination
+      const mileageData = await client.getAllMileage()
+
+      const results = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      }
+
+      for (const entry of mileageData) {
+        try {
+          // Match project by Simplicate ID
+          const project = await ctx.db.project.findFirst({
+            where: { simplicateId: entry.project_id }
+          })
+
+          if (!project) {
+            results.skipped++
+            continue
+          }
+
+          // Match user by Simplicate employee ID
+          const user = await ctx.db.user.findFirst({
+            where: { simplicateEmployeeId: entry.employee_id }
+          })
+
+          if (!user) {
+            results.skipped++
+            continue
+          }
+
+          // Calculate cost: km × rate
+          const kmCost = entry.kilometers * kmRate
+
+          // Upsert expense
+          const existing = await ctx.db.expense.findUnique({
+            where: { simplicateExpenseId: entry.id }
+          })
+
+          const expenseData = {
+            projectId: project.id,
+            userId: user.id,
+            simplicateExpenseId: entry.id,
+            category: 'KILOMETERS' as const,
+            kilometers: entry.kilometers,
+            amount: kmCost,
+            date: new Date(entry.date),
+            description: entry.description || null,
+            status: 'APPROVED' as const,
+          }
+
+          if (existing) {
+            await ctx.db.expense.update({
+              where: { id: existing.id },
+              data: expenseData
+            })
+            results.updated++
+          } else {
+            await ctx.db.expense.create({
+              data: expenseData
+            })
+            results.created++
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          results.errors.push(`Failed to sync mileage ${entry.id}: ${errorMessage}`)
+        }
+      }
+
+      return {
+        success: true,
+        totalProcessed: mileageData.length,
+        ...results,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to sync mileage from Simplicate: ${errorMessage}`)
+    }
+  }),
+
   // Sync all entities from Simplicate (non-destructive, parallel where safe)
   syncAll: publicProcedure.mutation(async ({ ctx }) => {
     const startTime = Date.now()

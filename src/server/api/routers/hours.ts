@@ -334,6 +334,49 @@ export const hoursRouter = createTRPCRouter({
         },
       })
 
+      // Build where clause for mileage (same filters as hours but for Expense model)
+      const mileageWhere: Prisma.ExpenseWhereInput = {
+        category: 'KILOMETERS',
+      }
+
+      // Apply same date filter as hours
+      if (selectedMonths.length > 0) {
+        const dateRanges = selectedMonths.map(m => {
+          const [year, month] = m.split('-').map(Number)
+          return {
+            gte: new Date(year!, month! - 1, 1),
+            lte: new Date(year!, month!, 0, 23, 59, 59),
+          }
+        })
+        mileageWhere.OR = dateRanges.map(range => ({
+          date: range,
+        }))
+      }
+
+      if (selectedProjects.length > 0) mileageWhere.projectId = { in: selectedProjects }
+      if (selectedEmployees.length > 0) mileageWhere.userId = { in: selectedEmployees }
+
+      // Get mileage data with same filters as hours
+      const mileage = await ctx.db.expense.findMany({
+        where: mileageWhere,
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              clientName: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      })
+
       // Group by project -> service -> employee
       const projectMap = new Map<string, {
         project: { id: string; name: string; clientName: string | null };
@@ -347,6 +390,9 @@ export const hoursRouter = createTRPCRouter({
             totalCost: number;
             totalMargin: number;
             rateSource: string | null;
+            totalKilometers: number;
+            kmCost: number;
+            trips: number;
           }>;
           hoursThisMonth: number;
           totalRevenue: number;
@@ -404,6 +450,9 @@ export const hoursRouter = createTRPCRouter({
             totalCost: 0,
             totalMargin: 0,
             rateSource: null,
+            totalKilometers: 0,
+            kmCost: 0,
+            trips: 0,
           })
         }
         const employeeData = serviceData.employees.get(employeeId)!
@@ -415,6 +464,54 @@ export const hoursRouter = createTRPCRouter({
         if (entry.rateSource) {
           employeeData.rateSource = entry.rateSource
         }
+      }
+
+      // Aggregate mileage data
+      for (const expense of mileage) {
+        const projectId = expense.project.id
+        if (!projectMap.has(projectId)) continue
+
+        const projectData = projectMap.get(projectId)!
+        projectData.totalCost += expense.amount || 0
+        projectData.totalMargin = projectData.totalRevenue - projectData.totalCost
+
+        const serviceId = 'no-service' // Mileage not linked to services initially
+        if (!projectData.services.has(serviceId)) {
+          projectData.services.set(serviceId, {
+            service: { id: 'no-service', name: 'No dienst', budgetHours: null, usedHours: 0 },
+            employees: new Map(),
+            hoursThisMonth: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalMargin: 0,
+          })
+        }
+        const serviceData = projectData.services.get(serviceId)!
+        serviceData.totalCost += expense.amount || 0
+        serviceData.totalMargin = serviceData.totalRevenue - serviceData.totalCost
+
+        const employeeId = expense.user.id
+        if (!serviceData.employees.has(employeeId)) {
+          serviceData.employees.set(employeeId, {
+            employee: expense.user,
+            hoursThisMonth: 0,
+            entries: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalMargin: 0,
+            rateSource: null,
+            totalKilometers: 0,
+            kmCost: 0,
+            trips: 0,
+          })
+        }
+
+        const employeeData = serviceData.employees.get(employeeId)!
+        employeeData.totalKilometers += expense.kilometers || 0
+        employeeData.kmCost += expense.amount || 0
+        employeeData.trips += 1
+        employeeData.totalCost += expense.amount || 0
+        employeeData.totalMargin = employeeData.totalRevenue - employeeData.totalCost
       }
 
       // Convert to array and sort
@@ -504,6 +601,8 @@ export const hoursRouter = createTRPCRouter({
           hoursThisMonth: hours.reduce((sum, h) => sum + h.hours, 0),
           entriesThisMonth: hours.length,
           projectsWithHours: filteredProjects.length,
+          kilometersThisMonth: mileage.reduce((sum, m) => sum + (m.kilometers || 0), 0),
+          tripsThisMonth: mileage.length,
         },
       }
     }),

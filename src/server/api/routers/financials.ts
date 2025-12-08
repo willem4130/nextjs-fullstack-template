@@ -29,7 +29,7 @@ export const financialsRouter = createTRPCRouter({
         end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
       }
 
-      // Get aggregated financials
+      // Get aggregated financials for hours
       const aggregate = await ctx.db.hoursEntry.aggregate({
         where: {
           date: { gte: start, lte: end },
@@ -39,6 +39,19 @@ export const financialsRouter = createTRPCRouter({
           revenue: true,
           cost: true,
           margin: true,
+        },
+        _count: true,
+      })
+
+      // Get aggregated mileage costs
+      const kmAggregate = await ctx.db.expense.aggregate({
+        where: {
+          date: { gte: start, lte: end },
+          category: 'KILOMETERS',
+        },
+        _sum: {
+          amount: true,
+          kilometers: true,
         },
         _count: true,
       })
@@ -57,14 +70,19 @@ export const financialsRouter = createTRPCRouter({
       })
 
       const revenue = aggregate._sum.revenue || 0
-      const cost = aggregate._sum.cost || 0
-      const margin = aggregate._sum.margin || 0
+      const hoursCost = aggregate._sum.cost || 0
+      const kmCost = kmAggregate._sum.amount || 0
+      const totalCost = hoursCost + kmCost
+      const margin = revenue - totalCost
       const marginPercentage = revenue > 0 ? (margin / revenue) * 100 : 0
 
       return {
         totalHours: aggregate._sum.hours || 0,
+        totalKilometers: kmAggregate._sum.kilometers || 0,
         totalRevenue: revenue,
-        totalCost: cost,
+        totalCost,
+        hoursCost,
+        kmCost,
         totalMargin: margin,
         marginPercentage,
         entryCount: aggregate._count,
@@ -116,6 +134,20 @@ export const financialsRouter = createTRPCRouter({
         take: input.limit,
       })
 
+      // Group mileage by project
+      const kmByProject = await ctx.db.expense.groupBy({
+        by: ['projectId'],
+        where: {
+          date: { gte: start, lte: end },
+          category: 'KILOMETERS',
+        },
+        _sum: {
+          amount: true,
+          kilometers: true,
+        },
+        _count: true,
+      })
+
       // Get project details
       const projectIds = projectData.map((p) => p.projectId)
       const projects = await ctx.db.project.findMany({
@@ -129,11 +161,16 @@ export const financialsRouter = createTRPCRouter({
       })
 
       const projectMap = new Map(projects.map((p) => [p.id, p]))
+      const kmMap = new Map(kmByProject.map(k => [k.projectId, k]))
 
       return projectData.map((p) => {
         const project = projectMap.get(p.projectId)
         const revenue = p._sum.revenue || 0
-        const margin = p._sum.margin || 0
+        const hoursCost = p._sum.cost || 0
+        const kmData = kmMap.get(p.projectId)
+        const kmCost = kmData?._sum.amount || 0
+        const totalCost = hoursCost + kmCost
+        const margin = revenue - totalCost
         const marginPercentage = revenue > 0 ? (margin / revenue) * 100 : 0
 
         return {
@@ -142,11 +179,15 @@ export const financialsRouter = createTRPCRouter({
           clientName: project?.clientName || null,
           projectNumber: project?.projectNumber || null,
           hours: p._sum.hours || 0,
+          kilometers: kmData?._sum.kilometers || 0,
           revenue,
-          cost: p._sum.cost || 0,
+          hoursCost,
+          kmCost,
+          totalCost,
           margin,
           marginPercentage,
           entryCount: p._count,
+          trips: kmData?._count || 0,
         }
       })
     }),
@@ -194,6 +235,20 @@ export const financialsRouter = createTRPCRouter({
         take: input.limit,
       })
 
+      // Group mileage by employee
+      const kmByEmployee = await ctx.db.expense.groupBy({
+        by: ['userId'],
+        where: {
+          date: { gte: start, lte: end },
+          category: 'KILOMETERS',
+        },
+        _sum: {
+          amount: true,
+          kilometers: true,
+        },
+        _count: true,
+      })
+
       // Get employee details
       const userIds = employeeData.map((e) => e.userId)
       const users = await ctx.db.user.findMany({
@@ -207,12 +262,16 @@ export const financialsRouter = createTRPCRouter({
       })
 
       const userMap = new Map(users.map((u) => [u.id, u]))
+      const kmMap = new Map(kmByEmployee.map(k => [k.userId, k]))
 
       return employeeData.map((e) => {
         const user = userMap.get(e.userId)
         const revenue = e._sum.revenue || 0
-        const cost = e._sum.cost || 0
-        const margin = e._sum.margin || 0
+        const hoursCost = e._sum.cost || 0
+        const kmData = kmMap.get(e.userId)
+        const kmCost = kmData?._sum.amount || 0
+        const totalCost = hoursCost + kmCost
+        const margin = revenue - totalCost
         const marginPercentage = revenue > 0 ? (margin / revenue) * 100 : 0
         const effectiveRate = (e._sum.hours || 0) > 0 ? revenue / (e._sum.hours || 1) : 0
 
@@ -222,12 +281,16 @@ export const financialsRouter = createTRPCRouter({
           email: user?.email || '',
           employeeType: user?.employeeType || null,
           hours: e._sum.hours || 0,
+          kilometers: kmData?._sum.kilometers || 0,
           revenue,
-          cost,
+          hoursCost,
+          kmCost,
+          totalCost,
           margin,
           marginPercentage,
           effectiveRate,
           entryCount: e._count,
+          trips: kmData?._count || 0,
         }
       })
     }),

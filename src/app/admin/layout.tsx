@@ -25,6 +25,7 @@ import {
   HelpCircle,
   Link2,
   Inbox,
+  Car,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -73,6 +74,11 @@ const navItems: NavItem[] = [
     title: 'Hours',
     href: '/admin/hours',
     icon: Clock,
+  },
+  {
+    title: 'Mileage',
+    href: '/admin/mileage',
+    icon: Car,
   },
   {
     title: 'Rates',

@@ -83,6 +83,19 @@ export interface SimplicateHours {
   };
 }
 
+export interface SimplicateMileage {
+  id: string;
+  employee_id: string;
+  project_id?: string;
+  projectservice_id?: string;
+  date: string;
+  kilometers: number;
+  description?: string;
+  rate?: number;
+  from_address?: string;
+  to_address?: string;
+}
+
 export interface SimplicateServiceHourType {
   id: string;
   budgeted_amount: number;
@@ -498,21 +511,38 @@ export class SimplicateClient {
   async getMileage(params?: {
     offset?: number;
     limit?: number;
-  }): Promise<Array<{
-    id: string;
-    employee_id: string;
-    project_id?: string;
-    kilometers: number;
-    date: string;
-    description?: string;
-    rate?: number;
-  }>> {
+  }): Promise<SimplicateMileage[]> {
     const queryParams = new URLSearchParams();
     if (params?.offset) queryParams.set('offset', params.offset.toString());
     if (params?.limit) queryParams.set('limit', params.limit.toString());
 
     const query = queryParams.toString();
     return this.request(`/mileage/mileage${query ? `?${query}` : ''}`);
+  }
+
+  // Fetch all mileage with pagination
+  async getAllMileage(): Promise<SimplicateMileage[]> {
+    const allMileage: SimplicateMileage[] = [];
+    const pageSize = 100;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const batch = await this.getMileage({
+        offset,
+        limit: pageSize,
+      });
+
+      allMileage.push(...batch);
+
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        offset += pageSize;
+      }
+    }
+
+    return allMileage;
   }
 
   // ==========================================
