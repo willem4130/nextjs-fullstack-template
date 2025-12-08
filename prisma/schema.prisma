@@ -176,6 +176,7 @@ model Project {
   // Project details
   clientName          String?
   projectNumber       String?
+  kmRate              Float?         // Project-specific kilometer rate for mileage expenses
 
   // Sync tracking
   lastSyncedAt        DateTime       @default(now())
