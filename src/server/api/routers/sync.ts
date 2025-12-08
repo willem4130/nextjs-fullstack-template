@@ -758,10 +758,6 @@ export const syncRouter = createTRPCRouter({
     const client = getSimplicateClient()
 
     try {
-      // Get default km rate from settings (fallback: 0.23 EUR/km)
-      const settings = await ctx.db.appSettings.findFirst()
-      const defaultKmRate = settings?.kmRate || 0.23
-
       // Fetch all mileage with pagination
       const mileageData = await client.getAllMileage()
 
@@ -776,6 +772,12 @@ export const syncRouter = createTRPCRouter({
         try {
           // Skip entries without project
           if (!entry.project?.id) {
+            results.skipped++
+            continue
+          }
+
+          // Skip entries without tariff - Simplicate is the source of truth
+          if (!entry.tariff) {
             results.skipped++
             continue
           }
@@ -800,9 +802,8 @@ export const syncRouter = createTRPCRouter({
             continue
           }
 
-          // Determine km rate: Use tariff from Simplicate (project-specific),
-          // fallback to project rate, then global default
-          const kmRate = entry.tariff ?? project.kmRate ?? defaultKmRate
+          // Use tariff from Simplicate - this is the source of truth
+          const kmRate = entry.tariff
 
           // Calculate cost: km × rate
           const kmCost = entry.mileage * kmRate
@@ -1046,15 +1047,17 @@ export const syncRouter = createTRPCRouter({
         // Get mileage data from Simplicate
         const mileageData = await client.getAllMileage()
 
-        // Get app settings for default km rate
-        const settingsForKmRate = await ctx.db.appSettings.findFirst()
-        const defaultKmRate = settingsForKmRate?.kmRate || 0.23
-
         for (const mileage of mileageData) {
           try {
             // Skip entries without project
             if (!mileage.project?.id) {
               results.mileage.errors.push(`Skipped mileage: no project`)
+              continue
+            }
+
+            // Skip entries without tariff - Simplicate is the source of truth
+            if (!mileage.tariff) {
+              results.mileage.errors.push(`Skipped mileage: no tariff`)
               continue
             }
 
@@ -1073,9 +1076,8 @@ export const syncRouter = createTRPCRouter({
               continue
             }
 
-            // Determine km rate: Use tariff from Simplicate (project-specific),
-            // fallback to project rate, then global default
-            const kmRate = mileage.tariff ?? project.kmRate ?? defaultKmRate
+            // Use tariff from Simplicate - this is the source of truth
+            const kmRate = mileage.tariff
 
             const kilometers = mileage.mileage
             const cost = kilometers * kmRate

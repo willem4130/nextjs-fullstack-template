@@ -285,6 +285,7 @@ export default function ProjectsPage() {
               {filteredProjects.map((project) => {
                 const totalHours = project.hoursEntries.reduce((sum, entry) => sum + entry.hours, 0)
                 const totalInvoiced = project.invoices.reduce((sum, inv) => sum + inv.amount, 0)
+                const totalKilometers = project.expenses.reduce((sum, exp) => sum + (exp.kilometers || 0), 0)
                 const signedContracts = project.contracts.filter((c) => c.status === 'SIGNED').length
                 const StatusIcon = statusConfig[project.status].icon
 
@@ -316,10 +317,14 @@ export default function ProjectsPage() {
                           </p>
                         )}
 
-                        <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="grid grid-cols-4 gap-2 text-center">
                           <div className="space-y-1">
                             <p className="text-lg font-semibold">{totalHours.toFixed(0)}</p>
                             <p className="text-xs text-muted-foreground">Hours</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-lg font-semibold">{totalKilometers.toFixed(0)}</p>
+                            <p className="text-xs text-muted-foreground">KM</p>
                           </div>
                           <div className="space-y-1">
                             <p className="text-lg font-semibold">
@@ -357,6 +362,7 @@ export default function ProjectsPage() {
                     <TableHead>Client</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Hours</TableHead>
+                    <TableHead className="text-right">KM</TableHead>
                     <TableHead className="text-right">Contracts</TableHead>
                     <TableHead className="text-right">Invoices</TableHead>
                     <TableHead>Started</TableHead>
@@ -366,6 +372,7 @@ export default function ProjectsPage() {
                 <TableBody>
                   {filteredProjects.map((project) => {
                     const totalHours = project.hoursEntries.reduce((sum, entry) => sum + entry.hours, 0)
+                    const totalKilometers = project.expenses.reduce((sum, exp) => sum + (exp.kilometers || 0), 0)
                     const signedContracts = project.contracts.filter((c) => c.status === 'SIGNED').length
                     const StatusIcon = statusConfig[project.status].icon
 
@@ -395,6 +402,9 @@ export default function ProjectsPage() {
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {totalHours.toFixed(1)}h
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {totalKilometers.toFixed(0)} km
                         </TableCell>
                         <TableCell className="text-right">
                           {signedContracts}/{project._count.contracts}
