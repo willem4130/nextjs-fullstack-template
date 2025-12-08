@@ -208,7 +208,7 @@ export default function MileagePage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Mileage Tracking</h1>
         <p className="text-muted-foreground">
-          Track kilometers traveled and associated costs (€0.23/km)
+          Track kilometers traveled and associated costs
         </p>
       </div>
 
@@ -351,7 +351,11 @@ export default function MileagePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{formatCurrency(overview.totalCost)}</div>
-                  <p className="text-xs text-muted-foreground">€0.23 per km</p>
+                  <p className="text-xs text-muted-foreground">
+                    {overview.totalKilometers > 0
+                      ? `€${(overview.totalCost / overview.totalKilometers).toFixed(2)} per km`
+                      : 'No data'}
+                  </p>
                 </CardContent>
               </Card>
 
