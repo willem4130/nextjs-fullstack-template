@@ -101,13 +101,25 @@ Based on `Planning/SUPPLY_CHAIN_SIMULATOR_PLAN.md`:
 
 **Next Steps**: Build UI components (database-independent), then deploy to production with Vercel Postgres
 
-### 🚧 Phase 1.5: UI Foundation (IN PROGRESS)
-- Build shadcn/ui components (Button, Table, Form, Dialog, Card)
-- Create Scenario List page with mock data
-- Create Scenario Create/Edit forms with Zod validation
-- Build Variable management UI
+### ✅ Phase 1.5: UI Foundation (COMPLETE)
+**Status**: Scenario management UI built with mock data, ready for browser testing
+- ✅ Installed react-hook-form + @hookform/resolvers
+- ✅ Created Form component (shadcn/ui)
+- ✅ Built ScenarioList component with Table (empty state, cost comparison, green/red savings indicators)
+- ✅ Built ScenarioForm with Zod validation (create/edit modal)
+- ✅ Full CRUD UI with mock data (no database required)
+- ✅ Dev server starts successfully on port 3001
+- ✅ All TypeScript checks passing
+
+**Next**: Build Variable + Parameter UIs, add dark mode, then ready for production deployment
+
+### 🚧 Phase 1.6: Complete UI & Deploy (NEXT)
+- Build Variable List and Form components
 - Build Parameter management UI
-- Style with Tailwind + dark mode support
+- Add dark mode toggle (next-themes)
+- Test full UI in browser
+- Deploy to Vercel with Postgres
+- Connect UI to tRPC routers (replace mock data)
 
 ### 📋 Phase 2: Calculation Engine
 - Formula parser/evaluator (supports variables, operators, functions)
