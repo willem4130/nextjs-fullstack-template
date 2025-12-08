@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description: 'Production-ready automation system for Simplicate with contract distribution, hours reminders, and invoice generation',
 }
 
+// Force dynamic rendering to fix React 19 context issues during build
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({
   children,
 }: Readonly<{
