@@ -55,6 +55,7 @@ import {
   Activity,
   Workflow,
   Mail,
+  Car,
 } from 'lucide-react'
 
 type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED'
@@ -220,6 +221,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const approvedHours = project.hoursEntries
     .filter((e) => e.status === 'APPROVED' || e.status === 'INVOICED')
     .reduce((sum, e) => sum + e.hours, 0)
+  const totalKilometers = project.expenses
+    .filter((e) => e.category === 'KILOMETERS')
+    .reduce((sum, e) => sum + (e.kilometers || 0), 0)
+  const totalKmCost = project.expenses
+    .filter((e) => e.category === 'KILOMETERS')
+    .reduce((sum, e) => sum + e.amount, 0)
   const totalInvoiced = project.invoices.reduce((sum, inv) => sum + inv.amount, 0)
   const paidInvoices = project.invoices.filter((inv) => inv.status === 'PAID')
   const totalPaid = paidInvoices.reduce((sum, inv) => sum + inv.amount, 0)
@@ -450,7 +457,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Hours Logged</CardTitle>
@@ -468,6 +475,19 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 className="h-1.5"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mileage</CardTitle>
+            <Car className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalKilometers.toFixed(0)} km</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              €{totalKmCost.toFixed(2)} total cost
+            </p>
           </CardContent>
         </Card>
 
@@ -613,6 +633,64 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+
+              {/* Mileage Section */}
+              {project.expenses.filter((e) => e.category === 'KILOMETERS').length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Car className="h-5 w-5" />
+                    Mileage Entries
+                  </h3>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Kilometers</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {project.expenses
+                          .filter((e) => e.category === 'KILOMETERS')
+                          .map((expense) => (
+                            <TableRow key={expense.id}>
+                              <TableCell>
+                                {new Date(expense.date).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4 text-muted-foreground" />
+                                  {expense.user.name || expense.user.email}
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate">
+                                {expense.description || '-'}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {expense.kilometers?.toFixed(0)} km
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                €{expense.amount.toFixed(2)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className="bg-green-100 text-green-600 border-0"
+                                >
+                                  {expense.status.toLowerCase()}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </CardContent>
