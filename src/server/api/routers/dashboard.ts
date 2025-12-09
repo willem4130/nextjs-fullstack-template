@@ -1,4 +1,5 @@
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc'
+import { startOfMonth, subMonths } from 'date-fns'
 
 export const dashboardRouter = createTRPCRouter({
   // Get dashboard overview stats
@@ -86,6 +87,134 @@ export const dashboardRouter = createTRPCRouter({
     const [mileageAgg, totalMileageEntries] = mileageStats
     const [totalAutomations, successAutomations, failedAutomations] = automationStats
 
+    // Calculate executive dashboard stats
+    const now = new Date()
+    const currentMonth = startOfMonth(now)
+    const previousMonth = subMonths(currentMonth, 1)
+
+    // Margin stats - calculate from current month hours
+    const currentMonthHours = await ctx.db.hoursEntry.findMany({
+      where: {
+        date: { gte: currentMonth },
+      },
+      select: {
+        revenue: true,
+        cost: true,
+        margin: true,
+      },
+    })
+
+    const previousMonthHours = await ctx.db.hoursEntry.findMany({
+      where: {
+        date: {
+          gte: previousMonth,
+          lt: currentMonth,
+        },
+      },
+      select: {
+        revenue: true,
+        cost: true,
+      },
+    })
+
+    const currentRevenue = currentMonthHours.reduce((sum, h) => sum + (h.revenue || 0), 0)
+    const currentCost = currentMonthHours.reduce((sum, h) => sum + (h.cost || 0), 0)
+    const currentMargin = currentRevenue > 0 ? ((currentRevenue - currentCost) / currentRevenue) * 100 : 0
+
+    const previousRevenue = previousMonthHours.reduce((sum, h) => sum + (h.revenue || 0), 0)
+    const previousCost = previousMonthHours.reduce((sum, h) => sum + (h.cost || 0), 0)
+    const previousMargin = previousRevenue > 0 ? ((previousRevenue - previousCost) / previousRevenue) * 100 : 0
+
+    // Count projects with low margins (using current month data)
+    const projectMargins = await ctx.db.project.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        hoursEntries: {
+          where: { date: { gte: currentMonth } },
+          select: { revenue: true, cost: true },
+        },
+      },
+    })
+
+    const criticalProjects = projectMargins.filter((p) => {
+      const projectRevenue = p.hoursEntries.reduce((sum, h) => sum + (h.revenue || 0), 0)
+      const projectCost = p.hoursEntries.reduce((sum, h) => sum + (h.cost || 0), 0)
+      const projectMargin = projectRevenue > 0 ? ((projectRevenue - projectCost) / projectRevenue) * 100 : 0
+      return projectMargin < 25 && projectRevenue > 0
+    }).length
+
+    const atRiskProjects = projectMargins.filter((p) => {
+      const projectRevenue = p.hoursEntries.reduce((sum, h) => sum + (h.revenue || 0), 0)
+      const projectCost = p.hoursEntries.reduce((sum, h) => sum + (h.cost || 0), 0)
+      const projectMargin = projectRevenue > 0 ? ((projectRevenue - projectCost) / projectRevenue) * 100 : 0
+      return projectMargin >= 25 && projectMargin < 40 && projectRevenue > 0
+    })
+
+    const atRiskRevenue = atRiskProjects.reduce((sum, p) => {
+      return sum + p.hoursEntries.reduce((s, h) => s + (h.revenue || 0), 0)
+    }, 0)
+
+    // Timeliness stats
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const lastCompleteMonth = subMonths(currentMonth, 1)
+
+    const unsignedContracts = await ctx.db.contract.count({
+      where: {
+        status: 'SENT',
+        sentAt: { lt: sevenDaysAgo },
+      },
+    })
+
+    const overdueInvoices = await ctx.db.invoice.count({
+      where: {
+        status: 'SENT',
+        dueDate: { lt: now },
+      },
+    })
+
+    // Count users with pending hours (simplified)
+    const activeMembers = await ctx.db.projectMember.findMany({
+      where: {
+        leftAt: null,
+        project: { status: 'ACTIVE' },
+      },
+      select: { userId: true },
+      distinct: ['userId'],
+    })
+
+    let pendingHoursUsers = 0
+    for (const member of activeMembers) {
+      const hoursCount = await ctx.db.hoursEntry.count({
+        where: {
+          userId: member.userId,
+          date: { gte: lastCompleteMonth, lt: currentMonth },
+        },
+      })
+      if (hoursCount === 0) pendingHoursUsers++
+    }
+
+    const criticalAlerts = pendingHoursUsers + unsignedContracts + overdueInvoices
+
+    // Error stats
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+    const [criticalErrors, highErrors, totalWorkflows24h, failedWorkflows24h] = await Promise.all([
+      ctx.db.errorRecord.count({
+        where: { severity: 'CRITICAL', status: 'ACTIVE' },
+      }),
+      ctx.db.errorRecord.count({
+        where: { severity: 'HIGH', status: 'ACTIVE' },
+      }),
+      ctx.db.automationLog.count({
+        where: { startedAt: { gte: oneDayAgo } },
+      }),
+      ctx.db.automationLog.count({
+        where: { startedAt: { gte: oneDayAgo }, status: 'FAILED' },
+      }),
+    ])
+
+    const errorRate = totalWorkflows24h > 0 ? (failedWorkflows24h / totalWorkflows24h) * 100 : 0
+
     return {
       projects: {
         total: totalProjects,
@@ -121,6 +250,23 @@ export const dashboardRouter = createTRPCRouter({
         failed: failedAutomations,
         successRate: totalAutomations > 0 ? (successAutomations / totalAutomations) * 100 : 0,
         recent: recentAutomations,
+      },
+      margin: {
+        overallMargin: Math.round(currentMargin * 10) / 10,
+        marginTrend: currentMargin > previousMargin ? ('up' as const) : currentMargin < previousMargin ? ('down' as const) : ('neutral' as const),
+        criticalProjects,
+        atRiskRevenue: Math.round(atRiskRevenue * 100) / 100,
+      },
+      timeliness: {
+        criticalAlerts,
+        pendingHoursUsers,
+        unsignedContracts,
+        overdueInvoices,
+      },
+      errors: {
+        critical: criticalErrors,
+        high: highErrors,
+        errorRate: Math.round(errorRate * 10) / 10,
       },
     }
   }),

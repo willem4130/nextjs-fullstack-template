@@ -72,6 +72,29 @@ enum EmployeeType {
   INTERNAL      // Internal employees (salaried)
 }
 
+// Error tracking enums
+enum ErrorSeverity {
+  CRITICAL  // System-breaking, requires immediate attention
+  HIGH      // Significant issues affecting multiple users/workflows
+  MEDIUM    // Isolated failures with retry capability
+  LOW       // Informational or expected failures
+}
+
+enum ErrorCategory {
+  WORKFLOW_ERROR      // Contract distribution, hours reminder, invoice generation failures
+  INTEGRATION_ERROR   // Simplicate API, email service, database errors
+  DATA_ERROR          // Missing data, invalid data, sync conflicts
+  SYSTEM_ERROR        // Queue processing, timeout, rate limit errors
+}
+
+enum ErrorStatus {
+  ACTIVE          // Currently occurring
+  ACKNOWLEDGED    // Seen by admin, being investigated
+  DISMISSED       // Intentionally ignored (false positive, known issue)
+  RESOLVED        // Manually fixed
+  AUTO_RESOLVED   // No occurrences for 24 hours
+}
+
 model User {
   id                    String                 @id @default(cuid())
   email                 String                 @unique
@@ -196,6 +219,7 @@ model Project {
   services            ProjectService[]
   sentEmails          SentEmail[]
   documentRequests    DocumentRequest[]
+  errorRecords        ErrorRecord[]
 
   @@index([simplicateId])
   @@index([status])
@@ -582,6 +606,7 @@ model AutomationLog {
 
   // Relations
   project       Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  errorRecords  ErrorRecord[]
 
   @@index([workflowType])
   @@index([status])
@@ -868,6 +893,9 @@ model WorkflowQueue {
 
   createdAt     DateTime     @default(now())
 
+  // Relations
+  errorRecords  ErrorRecord[]
+
   @@index([status, scheduledFor])
   @@index([workflowType])
 }
@@ -1050,4 +1078,66 @@ model EmailAttachment {
   createdAt     DateTime @default(now())
 
   @@index([emailId])
+}
+
+// ==========================================
+// ERROR TRACKING & MONITORING
+// ==========================================
+
+model ErrorRecord {
+  id                String         @id @default(cuid())
+
+  // Classification
+  severity          ErrorSeverity
+  category          ErrorCategory
+  errorType         String         // Specific error type (e.g., "EMAIL_SERVICE_ERROR")
+
+  // Error details
+  message           String
+  stackTrace        String?        @db.Text
+  context           Json?          // Related entity IDs, metadata, request data
+
+  // Status tracking
+  status            ErrorStatus    @default(ACTIVE)
+  firstOccurrence   DateTime       @default(now())
+  lastOccurrence    DateTime       @default(now())
+  occurrenceCount   Int            @default(1)
+
+  // Resolution tracking
+  acknowledgedBy    String?
+  acknowledgedAt    DateTime?
+  resolvedBy        String?
+  resolvedAt        DateTime?
+  resolutionNotes   String?        @db.Text
+
+  // Relations
+  automationLogId   String?
+  automationLog     AutomationLog? @relation(fields: [automationLogId], references: [id])
+  queueItemId       String?
+  queueItem         WorkflowQueue? @relation(fields: [queueItemId], references: [id])
+  projectId         String?
+  project           Project?       @relation(fields: [projectId], references: [id])
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Indexes for performance
+  @@index([severity, status])
+  @@index([category, status])
+  @@index([firstOccurrence])
+  @@index([automationLogId])
+  @@index([queueItemId])
+}
+
+// ==========================================
+// MARGIN SETTINGS
+// ==========================================
+
+model MarginSettings {
+  id                String   @id @default(cuid())
+  targetMargin      Float    @default(40)    // Healthy margin target (%)
+  warningThreshold  Float    @default(25)    // Yellow zone threshold (%)
+  criticalThreshold Float    @default(15)    // Red zone threshold (%)
+  updatedAt         DateTime @updatedAt
+  updatedBy         String?
 }

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WorkflowType, QueueStatus } from '@prisma/client';
 import { runContractDistribution } from '@/lib/workflows/contract-distribution';
+import { captureError, classifyErrorSeverity } from '@/lib/errors/handler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -139,6 +140,23 @@ async function processQueueItem(item: {
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const newAttempts = item.attempts + 1;
+
+    // Capture error in ErrorRecord
+    await captureError({
+      severity: classifyErrorSeverity(error as Error, { attempts: newAttempts, maxAttempts: item.maxAttempts }),
+      category: 'WORKFLOW_ERROR',
+      errorType: `${item.workflowType}_FAILED`,
+      message: errorMessage,
+      stackTrace: error instanceof Error ? error.stack : undefined,
+      context: {
+        workflowType: item.workflowType,
+        payload: item.payload,
+        attempts: newAttempts,
+        maxAttempts: item.maxAttempts,
+      },
+      queueItemId: item.id,
+      projectId: item.projectId || undefined,
+    });
 
     // Mark as failed if max attempts reached, otherwise back to pending
     await prisma.workflowQueue.update({

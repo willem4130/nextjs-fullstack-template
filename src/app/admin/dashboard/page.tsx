@@ -12,7 +12,10 @@ import {
   FolderKanban,
   Activity,
   AlertCircle,
-  Car
+  Car,
+  TrendingUp,
+  Timer,
+  ShieldAlert
 } from 'lucide-react'
 import { api } from '@/trpc/react'
 import Link from 'next/link'
@@ -168,6 +171,172 @@ export default function DashboardPage() {
             </Link>
           )
         })}
+      </div>
+
+      {/* Executive KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Margin Health Card */}
+        <Link href="/admin/margin-steering">
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer ${
+            overview.margin?.overallMargin < 15 ? 'border-red-500 border-2' :
+            overview.margin?.overallMargin < 25 ? 'border-yellow-500 border-2' :
+            'border-green-500'
+          }`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Margin Health</CardTitle>
+              <TrendingUp className={`h-5 w-5 ${
+                overview.margin?.overallMargin < 15 ? 'text-red-500' :
+                overview.margin?.overallMargin < 25 ? 'text-yellow-500' :
+                'text-green-500'
+              }`} />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">
+                    {overview.margin?.overallMargin.toFixed(1) ?? '0.0'}%
+                  </div>
+                  {overview.margin?.marginTrend === 'up' && (
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      <ArrowUpIcon className="h-3 w-3 mr-1" />
+                      Trending Up
+                    </Badge>
+                  )}
+                  {overview.margin?.marginTrend === 'down' && (
+                    <Badge variant="outline" className="text-red-600 border-red-600">
+                      <ArrowDownIcon className="h-3 w-3 mr-1" />
+                      Trending Down
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-3">
+                  <div>
+                    <p className="font-medium">Critical Projects</p>
+                    <p className={`text-lg font-bold ${overview.margin?.criticalProjects > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      {overview.margin?.criticalProjects ?? 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium">At-Risk Revenue</p>
+                    <p className="text-lg font-bold text-yellow-600">
+                      ${(overview.margin?.atRiskRevenue ?? 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Timeliness Alert Card */}
+        <Link href="/admin/timeliness">
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer ${
+            overview.timeliness?.criticalAlerts > 5 ? 'border-red-500 border-2' :
+            overview.timeliness?.criticalAlerts > 0 ? 'border-yellow-500 border-2' :
+            'border-green-500'
+          }`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Timeliness Alerts</CardTitle>
+              <Timer className={`h-5 w-5 ${
+                overview.timeliness?.criticalAlerts > 5 ? 'text-red-500' :
+                overview.timeliness?.criticalAlerts > 0 ? 'text-yellow-500' :
+                'text-green-500'
+              }`} />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">
+                    {overview.timeliness?.criticalAlerts ?? 0}
+                  </div>
+                  {overview.timeliness?.criticalAlerts > 0 && (
+                    <Badge variant="destructive">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Attention Needed
+                    </Badge>
+                  )}
+                  {overview.timeliness?.criticalAlerts === 0 && (
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      All Clear
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-xs text-muted-foreground mt-3">
+                  <div>
+                    <p className="font-medium">Hours</p>
+                    <p className="text-sm font-bold">{overview.timeliness?.pendingHoursUsers ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Contracts</p>
+                    <p className="text-sm font-bold">{overview.timeliness?.unsignedContracts ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Invoices</p>
+                    <p className="text-sm font-bold">{overview.timeliness?.overdueInvoices ?? 0}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Error Monitor Card */}
+        <Link href="/admin/errors">
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer ${
+            overview.errors?.critical > 0 ? 'border-red-500 border-2' :
+            overview.errors?.high > 0 ? 'border-yellow-500 border-2' :
+            'border-green-500'
+          }`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Error Monitor</CardTitle>
+              <ShieldAlert className={`h-5 w-5 ${
+                overview.errors?.critical > 0 ? 'text-red-500' :
+                overview.errors?.high > 0 ? 'text-yellow-500' :
+                'text-green-500'
+              }`} />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">
+                    {(overview.errors?.critical ?? 0) + (overview.errors?.high ?? 0)}
+                  </div>
+                  {overview.errors?.critical > 0 && (
+                    <Badge variant="destructive">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Critical
+                    </Badge>
+                  )}
+                  {overview.errors?.critical === 0 && overview.errors?.high > 0 && (
+                    <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      High Priority
+                    </Badge>
+                  )}
+                  {overview.errors?.critical === 0 && overview.errors?.high === 0 && (
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Healthy
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-3">
+                  <div>
+                    <p className="font-medium">Critical Errors</p>
+                    <p className="text-lg font-bold text-red-500">{overview.errors?.critical ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Error Rate</p>
+                    <p className="text-lg font-bold text-yellow-600">
+                      {overview.errors?.errorRate.toFixed(1) ?? '0.0'}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Automation & Projects */}
