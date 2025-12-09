@@ -8,6 +8,10 @@ import Link from 'next/link'
 
 export default function MarginSteeringPage() {
   const { data: overview, isLoading } = api.dashboard.getOverview.useQuery()
+  const { data: projectMargins, isLoading: isLoadingProjects } = api.margin.getProjectMargins.useQuery({
+    sort: 'margin-asc',
+    status: 'ACTIVE',
+  })
 
   if (isLoading) {
     return (
@@ -113,24 +117,101 @@ export default function MarginSteeringPage() {
         </Card>
       </div>
 
-      {/* Coming Soon Section */}
+      {/* Project Margin Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Detailed Margin Analysis</CardTitle>
+          <CardTitle>Project Margin Breakdown</CardTitle>
           <CardDescription>
-            Project-by-project margin breakdown and recommendations
+            Sorted by margin (lowest first) - Focus on critical and at-risk projects
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12">
-            <Badge variant="secondary" className="text-lg px-4 py-2">
-              Coming Soon
-            </Badge>
-            <p className="text-muted-foreground mt-4">
-              Phase 3 implementation: Project margin table, employee profitability analysis,
-              margin trend charts, and automated alerts
-            </p>
-          </div>
+          {isLoadingProjects && (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading project margins...
+            </div>
+          )}
+          {!isLoadingProjects && (!projectMargins || projectMargins.projects.length === 0) && (
+            <div className="text-center py-8 text-muted-foreground">
+              No projects with hours data found
+            </div>
+          )}
+          {!isLoadingProjects && projectMargins && projectMargins.projects.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4">Project</th>
+                    <th className="text-left py-3 px-4">Client</th>
+                    <th className="text-right py-3 px-4">Hours</th>
+                    <th className="text-right py-3 px-4">Revenue</th>
+                    <th className="text-right py-3 px-4">Cost</th>
+                    <th className="text-right py-3 px-4">Margin</th>
+                    <th className="text-right py-3 px-4">Margin %</th>
+                    <th className="text-center py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectMargins.projects.map((project) => (
+                    <tr
+                      key={project.id}
+                      className={`border-b hover:bg-muted/50 ${
+                        project.severity === 'critical' ? 'bg-red-50' :
+                        project.severity === 'warning' ? 'bg-yellow-50' :
+                        ''
+                      }`}
+                    >
+                      <td className="py-3 px-4">
+                        <Link href={`/admin/projects/${project.id}`} className="font-medium hover:underline">
+                          {project.name}
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-muted-foreground">
+                        {project.clientName || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-right text-sm">
+                        {project.totalHours.toFixed(1)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium">
+                        ${project.revenue.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium">
+                        ${project.cost.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold">
+                        ${project.margin.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className={`font-bold ${
+                          project.severity === 'critical' ? 'text-red-600' :
+                          project.severity === 'warning' ? 'text-yellow-600' :
+                          'text-green-600'
+                        }`}>
+                          {project.marginPercentage.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <Badge
+                          variant={
+                            project.severity === 'critical' ? 'destructive' :
+                            project.severity === 'warning' ? 'outline' :
+                            'default'
+                          }
+                          className={
+                            project.severity === 'warning' ? 'border-yellow-600 text-yellow-600' : ''
+                          }
+                        >
+                          {project.severity === 'critical' ? 'Critical' :
+                           project.severity === 'warning' ? 'At Risk' :
+                           'Healthy'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

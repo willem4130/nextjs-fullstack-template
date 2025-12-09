@@ -20,6 +20,7 @@ import { inboundEmailRouter } from '@/server/api/routers/inboundEmail'
 import { mileageRouter } from '@/server/api/routers/mileage'
 import { timelinessRouter } from '@/server/api/routers/timeliness'
 import { errorsRouter } from '@/server/api/routers/errors'
+import { marginRouter } from '@/server/api/routers/margin'
 
 /**
  * This is the primary router for your server.
@@ -47,6 +48,7 @@ export const appRouter = createTRPCRouter({
   mileage: mileageRouter,
   timeliness: timelinessRouter,
   errors: errorsRouter,
+  margin: marginRouter,
 })
 
 // Export type definition of API
