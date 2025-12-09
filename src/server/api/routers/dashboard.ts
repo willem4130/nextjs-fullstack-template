@@ -198,13 +198,24 @@ export const dashboardRouter = createTRPCRouter({
     // Error stats
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
-    const [criticalErrors, highErrors, totalWorkflows24h, failedWorkflows24h] = await Promise.all([
-      ctx.db.errorRecord.count({
-        where: { severity: 'CRITICAL', status: 'ACTIVE' },
-      }),
-      ctx.db.errorRecord.count({
-        where: { severity: 'HIGH', status: 'ACTIVE' },
-      }),
+    // Error tracking (safe fallback if ErrorRecord table doesn't exist yet)
+    let criticalErrors = 0
+    let highErrors = 0
+    try {
+      [criticalErrors, highErrors] = await Promise.all([
+        ctx.db.errorRecord.count({
+          where: { severity: 'CRITICAL', status: 'ACTIVE' },
+        }),
+        ctx.db.errorRecord.count({
+          where: { severity: 'HIGH', status: 'ACTIVE' },
+        }),
+      ])
+    } catch (error) {
+      // ErrorRecord table doesn't exist yet (migration pending)
+      console.warn('[Dashboard] ErrorRecord table not available:', error)
+    }
+
+    const [totalWorkflows24h, failedWorkflows24h] = await Promise.all([
       ctx.db.automationLog.count({
         where: { startedAt: { gte: oneDayAgo } },
       }),
